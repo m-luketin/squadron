@@ -687,7 +687,6 @@ function HexGrid({
       }
     });
     return map;
-    // eslint-disable-next-line
   }, [agents, t]);
 
   const onWheel = (e) => {

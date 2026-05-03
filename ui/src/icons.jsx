@@ -31,5 +31,4 @@ const I = {
 window.I = I;
 window.Icon = Icon;
 // Debug — confirms which icons.jsx version actually parsed and loaded.
-// eslint-disable-next-line no-console
 console.log('[squadron] icons loaded:', Object.keys(I).join(', '));

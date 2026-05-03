@@ -112,7 +112,7 @@ These graduate from spec → implementation in M-MDContract.
 | **M-MDContract** | YAML frontmatter contract, per-agent read/write scopes, `status.md` per workflow, verifier agent. |
 | **M4** | Throttle / loop-detector / global cost ceiling — full guardrail set. Hooks-based. |
 | **M5** | Convert prototype to Next.js + Tailwind + shadcn (production codebase). |
-| **M6** | `move_toward` autonomous movement (path planning + animation sync). |
+| **M6** | ✅ **Shipped (May 2026).** `move_toward` autonomous movement with path planning + animation. |
 | **M-MultiModel** | Gemini + Ollama providers wired. |
 | **M-License** | Pick AGPL or BUSL; ship LICENSE + headers. |
 
@@ -205,7 +205,7 @@ Center is a tabbed workspace, IDE-style.
 - Vault writes happen autonomously during conversations (agent uses its own filesystem tools — its cwd is its vault) AND manually via the graph editor.
 - **Read access:** adjacent agents read by default; per-edge toggle disables. *(M-Capabilities will replace this with explicit scoped tokens.)*
 - **Write access:** only the owning agent and the user. Neighbors never write. Hard rule.
-- **Graph view:** wikilinks between vault files (parsing implementation deferred to M-MDContract; current view shows radial layout from `index.md`).
+- **Graph view:** wikilinks between vault files. ✅ Wikilink parsing shipped (May 2026) — `parseVaultEdges()` extracts `[[target]]` / `[[target|alias]]` / `[[target#section]]`; UI renders real edges and falls back to radial layout only when zero links exist.
 - **MD-coordination contract (M-MDContract, planned):** YAML frontmatter required on coordination files; per-workflow `status.md`; append-only for decisions/history; verifier agent at end of pipeline.
 
 ## 12. Audit task (next deliverable, before more features)
