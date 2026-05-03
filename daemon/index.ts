@@ -3,6 +3,7 @@
 import { startServer } from "./server.ts";
 import { closeDb, getDbPath } from "./db.ts";
 import { ensureVaultDir, writeIdentityFile } from "./vault.ts";
+import { maybeSeedDemoAgents } from "./seed-demo.ts";
 
 const host = process.env.SQUADRON_HOST ?? "localhost";
 const port = Number(process.env.SQUADRON_PORT ?? 7878);
@@ -17,6 +18,12 @@ const running = startServer({ host, port });
 console.log(`[squadron] daemon listening on ws://${host}:${port}/ws`);
 console.log(`[squadron] healthcheck:  http://${host}:${port}/health`);
 console.log(`[squadron] DB:           ${getDbPath()}`);
+
+// First-run demo seed: drop a Squadron-about-Squadron starter team if the world
+// is empty. Idempotent — only fires when there are zero agents in the DB.
+if (maybeSeedDemoAgents(running.world)) {
+  console.log(`[squadron] seeded 4 demo agents (Tutor, Architect, Spec, Skills) — fresh install`);
+}
 
 // M3: ensure every existing agent has a vault folder + index.md (idempotent).
 // M3.5: also write/refresh identity.md so the file matches the current DB state
