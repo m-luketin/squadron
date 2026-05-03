@@ -1,5 +1,9 @@
 // One AgentWorker = one `claude -p` subprocess.
 // Owns the lifecycle, line-buffered stdio readers, and event/error/exit callbacks.
+//
+// Worker interface is the contract any provider (claude, codex, openrouter, …)
+// must satisfy. The factory in worker-factory.ts dispatches construction by
+// provider name; server.ts calls only methods on the interface.
 
 import {
   buildClaudeArgs,
@@ -8,6 +12,20 @@ import {
   parseStreamJson,
 } from "./claude-cli.ts";
 import type { ClaudeStreamEvent } from "./protocol.ts";
+
+/** Common runtime contract for every model provider's worker. */
+export interface Worker {
+  readonly id: string;
+  readonly name: string;
+  /** Latest known provider session id (for resume). Null until the provider hands one over. */
+  readonly sessionId: string | null;
+  /** Spawn the underlying transport (subprocess for claude/codex; HTTP client for openrouter). Idempotent. */
+  start(): void;
+  /** Deliver one user turn. */
+  send(text: string): void;
+  /** Tear down. Idempotent. */
+  kill(): void;
+}
 
 export interface AgentWorkerInit {
   id: string;
@@ -29,7 +47,7 @@ export interface AgentWorkerInit {
   onResult?: (text: string) => void;
 }
 
-export class AgentWorker {
+export class AgentWorker implements Worker {
   readonly id: string;
   readonly name: string;
   /** Captured from the first system/init event; falls back to the input id. */

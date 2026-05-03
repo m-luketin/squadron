@@ -4,7 +4,8 @@
 // by every connected tab, and can be auto-resumed on daemon startup.
 // All world deltas + subprocess events broadcast to every open client.
 
-import { AgentWorker } from "./agent-worker.ts";
+import type { Worker } from "./agent-worker.ts";
+import { createWorker } from "./worker-factory.ts";
 import {
   World,
   type AgentDto,
@@ -125,7 +126,7 @@ export function startServer(opts: StartServerOptions): RunningServer {
   /** All open WS connections — used for world / subprocess event broadcasts. */
   const conns = new Set<Bun.ServerWebSocket<ConnState>>();
   /** Live workers by agentId. One worker per agent at most, daemon-scoped. */
-  const workers = new Map<string, AgentWorker>();
+  const workers = new Map<string, Worker>();
 
   // ---- M3.5: autonomous-wakeup state ----
   /** Master toggle; the top-bar kill switch flips this. */
@@ -515,7 +516,10 @@ export function startServer(opts: StartServerOptions): RunningServer {
       },
     });
 
-    const worker = new AgentWorker({
+    // M-MultiModel phase 1: dispatch worker construction through the factory.
+    // Hard-coded "claude" until per-agent provider selection lands (the agent
+    // DTO will gain a `provider` field; for now everyone uses claude).
+    const worker: Worker = createWorker("claude", {
       id: dto.id,
       name: dto.name,
       systemPrompt: augmentedPrompt,
