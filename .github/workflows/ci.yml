@@ -1,0 +1,29 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Type check
+        run: bunx tsc --noEmit
+      - name: Secret/PII scan
+        run: bash scripts/scan-secrets.sh
+      - name: Verify package allowlist
+        run: |
+          node -e "
+            const pkg = require('./package.json');
+            const expected = ['bin/','daemon/','scripts/','ui/','LICENSE','README.md'];
+            const extras = (pkg.files||[]).filter(f => !expected.includes(f));
+            if (extras.length) { console.error('files allowlist grew:', extras); process.exit(1); }
+            console.log('files allowlist OK');
+          "
