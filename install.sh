@@ -1,26 +1,15 @@
 #!/usr/bin/env bash
-# Squadron one-shot installer for macOS.
+# Squadron bootstrap installer for macOS.
 #
-#   curl -fsSL https://raw.githubusercontent.com/<owner>/squadron/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/m-luketin/squadron/main/install.sh | bash
 #
-# Or, with a custom install location:
-#   SQUADRON_DIR=~/code/squadron curl -fsSL ... | bash
+# This installs the prerequisites (Bun + claude-code + cloudflared) then runs
+# Squadron via `npx @m-luketin/squadron`. If you already have Bun, you can skip
+# this script entirely — just run:
 #
-# What this does:
-#   1. Installs Bun (if missing).
-#   2. Installs the claude-code CLI globally via Bun (if missing).
-#   3. Installs cloudflared via Homebrew (if missing — optional, only needed for
-#      remote access; local-only mode works without it).
-#   4. Clones https://github.com/<owner>/squadron to $SQUADRON_DIR (default ~/squadron).
-#   5. Runs `bun install`.
-#   6. Prompts you to sign in to claude (if you aren't already).
-#   7. Starts the daemon + static + tunnels via `bun run up` and opens the URL
-#      in your browser.
+#   npx @m-luketin/squadron
 
 set -euo pipefail
-
-REPO_URL="${SQUADRON_REPO:-https://github.com/m-luketin/squadron.git}"
-SQUADRON_DIR="${SQUADRON_DIR:-$HOME/squadron}"
 
 step() { printf "\n\033[1;36m▸ %s\033[0m\n" "$1"; }
 ok()   { printf "  \033[1;32m✓\033[0m %s\n" "$1"; }
@@ -69,27 +58,7 @@ else
   fi
 fi
 
-# 4. Clone
-step "Clone"
-if [[ -d "$SQUADRON_DIR/.git" ]]; then
-  ok "already cloned at $SQUADRON_DIR — pulling latest"
-  ( cd "$SQUADRON_DIR" && git pull --ff-only ) || warn "pull failed; continuing with current checkout"
-elif [[ -e "$SQUADRON_DIR" ]]; then
-  fail "$SQUADRON_DIR exists and is not a git checkout. Set SQUADRON_DIR to a different path or remove it."
-else
-  if [[ "$REPO_URL" == *CHANGE_ME* ]]; then
-    fail "REPO_URL is unset. Pass SQUADRON_REPO=<git-url> or edit install.sh."
-  fi
-  git clone "$REPO_URL" "$SQUADRON_DIR"
-  ok "cloned to $SQUADRON_DIR"
-fi
-
-# 5. Deps
-step "Install dependencies"
-( cd "$SQUADRON_DIR" && bun install )
-ok "deps installed"
-
-# 6. claude auth check
+# 4. claude auth check
 step "claude auth"
 if claude auth status 2>&1 | grep -qiE "logged in|authenticated|active"; then
   ok "claude already logged in"
@@ -100,15 +69,6 @@ else
   read -r -p "  press Enter when you've finished claude auth login… " _
 fi
 
-# 7. Bring up
-step "Starting Squadron"
-cd "$SQUADRON_DIR"
-if command -v cloudflared >/dev/null 2>&1; then
-  bun run up
-else
-  SKIP_TUNNELS=1 bun run up
-  open "http://localhost:8787/Squadron.html?daemon=ws://localhost:7878/ws" 2>/dev/null || true
-fi
-
-printf "\n\033[1;32m✓ Done.\033[0m If your browser didn't open, the URL was printed above.\n"
-printf "  Stop everything with:  cd %s && bun run down\n" "$SQUADRON_DIR"
+# 5. Hand off to npx
+step "Starting Squadron via npx @m-luketin/squadron"
+exec bunx @m-luketin/squadron

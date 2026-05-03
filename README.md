@@ -8,7 +8,7 @@
 
 ---
 
-![Squadron — six-agent product team in a hex world](./docs/squadron.png)
+![Squadron — six-agent product team in a hex world](https://raw.githubusercontent.com/m-luketin/squadron/main/docs/squadron.png)
 
 ---
 
@@ -25,21 +25,27 @@ What that gets you:
 
 ---
 
-## Install (macOS, ~60 seconds)
+## Install
+
+```bash
+npx @m-luketin/squadron
+```
+
+That's it. The CLI checks your dependencies, starts the daemon + static server + tunnels, and prints the URL to open in your browser. `Ctrl+C` shuts everything down cleanly. Run it again any time to restart — your agents and worlds live in `~/.hexagent/` and persist across sessions.
+
+`npx` always uses the latest published version, so updates land automatically.
+
+### Don't have Bun yet?
+
+The CLI assumes [Bun](https://bun.sh) is installed (the daemon is Bun-native). If `npx @m-luketin/squadron` complains about missing Bun, the bootstrap installer handles it for you:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/m-luketin/squadron/main/install.sh | bash
 ```
 
-The installer checks for and installs (only what's missing):
+It installs Bun, the [claude-code CLI](https://docs.claude.com/en/docs/claude-code), and (optionally) [cloudflared](https://github.com/cloudflare/cloudflared), then runs Squadron.
 
-- **[Bun](https://bun.sh)** — runtime
-- **[claude-code CLI](https://docs.claude.com/en/docs/claude-code)** — the agent driver
-- **[cloudflared](https://github.com/cloudflare/cloudflared)** — optional, for accessing Squadron from another device
-
-Then it clones this repo, runs `bun install`, prompts you to `claude auth login` if you aren't already signed in, starts everything, and opens your browser at the right URL.
-
-### Manual install
+### Manual install (for development)
 
 ```bash
 git clone https://github.com/m-luketin/squadron && cd squadron

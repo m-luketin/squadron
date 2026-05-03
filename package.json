@@ -1,8 +1,43 @@
 {
-  "name": "squadron",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@m-luketin/squadron",
+  "version": "0.1.0",
+  "description": "A spatial multi-agent control plane that runs on your machine. Agents live on a hex grid, share a markdown vault, walk to each other, talk through MCP.",
+  "keywords": [
+    "ai",
+    "agents",
+    "multi-agent",
+    "claude",
+    "claude-code",
+    "mcp",
+    "hex-grid",
+    "markdown-graph",
+    "karpathy"
+  ],
   "type": "module",
+  "license": "MIT",
+  "author": "Matija Luketin <matija@solbound.dev>",
+  "homepage": "https://github.com/m-luketin/squadron",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/m-luketin/squadron.git"
+  },
+  "bugs": {
+    "url": "https://github.com/m-luketin/squadron/issues"
+  },
+  "bin": {
+    "squadron": "./bin/squadron.js"
+  },
+  "files": [
+    "bin/",
+    "daemon/",
+    "scripts/",
+    "ui/",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "daemon": "bun --hot run daemon/index.ts",
     "daemon:prod": "bun run daemon/index.ts",
