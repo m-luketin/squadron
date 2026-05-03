@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Squadron · Spatial multi-agent control plane</title>
+<meta name="description" content="A free, local, OSS multi-agent control plane. Agents live on a hex grid, share a markdown vault, walk to each other, talk through MCP." />
+<style>
+  :root {
+    --bg: #0c0d10;
+    --fg: #e8ebee;
+    --fg-muted: #9aa3ac;
+    --fg-faint: #6b727a;
+    --line: #1f242a;
+    --line-soft: #161a1f;
+    --surface: #11141a;
+    --accent: #7fb6d9;
+    --red: #d93b25;
+    --amber: #e6c068;
+    --font-display: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-display);
+    font-size: 16px;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 64px 24px 96px; }
+
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 56px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); }
+  .brand { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.04em; }
+  .marker { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--fg-faint); text-transform: uppercase; }
+  .sep { flex: 1; height: 1px; background: var(--line); }
+
+  h1 {
+    font-size: 44px; line-height: 1.05; letter-spacing: -0.02em;
+    margin: 0 0 16px; font-weight: 600;
+  }
+  h1 .accent { color: var(--accent); }
+  .subhead { color: var(--fg-muted); font-size: 18px; max-width: 640px; margin: 0 0 32px; }
+
+  .install-box {
+    border: 1px solid var(--line); background: var(--surface);
+    border-radius: 6px; padding: 18px 20px; margin: 24px 0 40px;
+    font-family: var(--font-mono); font-size: 13px;
+  }
+  .install-box .hint {
+    font-family: var(--font-display); font-size: 12px; color: var(--fg-faint);
+    margin-bottom: 8px; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .install-box code {
+    color: var(--accent); display: block; word-break: break-all;
+    user-select: all; line-height: 1.6;
+  }
+  .install-box .copy {
+    display: inline-block; margin-top: 10px;
+    background: transparent; border: 1px solid var(--line); border-radius: 3px;
+    color: var(--fg-muted); font-family: var(--font-mono); font-size: 11px;
+    padding: 4px 10px; cursor: pointer; letter-spacing: 0.04em;
+  }
+  .install-box .copy:hover { color: var(--fg); border-color: var(--accent); }
+
+  section { margin: 56px 0; }
+  h2 {
+    font-size: 22px; font-weight: 500; letter-spacing: -0.01em;
+    margin: 0 0 16px;
+  }
+  h2 .marker-prefix { color: var(--fg-faint); margin-right: 6px; }
+
+  ul.feat { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px; }
+  ul.feat li { padding-left: 18px; position: relative; color: var(--fg-muted); font-size: 14px; }
+  ul.feat li::before { content: '▸'; position: absolute; left: 0; color: var(--accent); }
+  ul.feat li strong { color: var(--fg); font-weight: 500; }
+
+  .req { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+  .req span {
+    padding: 4px 10px; border: 1px solid var(--line); border-radius: 3px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted);
+    letter-spacing: 0.04em;
+  }
+
+  form.signup {
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 24px; background: var(--surface);
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  form.signup label {
+    font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint);
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  form.signup input[type="email"], form.signup textarea {
+    background: var(--bg); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 4px; padding: 10px 12px;
+    font-family: var(--font-mono); font-size: 13px;
+  }
+  form.signup textarea { min-height: 70px; resize: vertical; }
+  form.signup button[type="submit"] {
+    background: var(--red); color: white; border: none; border-radius: 4px;
+    padding: 11px 18px; font-family: var(--font-display); font-size: 14px;
+    font-weight: 500; cursor: pointer; letter-spacing: 0.02em;
+    align-self: flex-start;
+  }
+  form.signup button[type="submit"]:hover { filter: brightness(1.08); }
+  form.signup .hint { font-size: 12px; color: var(--fg-faint); margin-top: 4px; }
+
+  footer {
+    margin-top: 96px; padding-top: 32px; border-top: 1px solid var(--line-soft);
+    color: var(--fg-faint); font-family: var(--font-mono); font-size: 11px;
+    display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+    letter-spacing: 0.04em;
+  }
+  footer a { color: var(--fg-muted); text-decoration: none; border-bottom: 1px solid transparent; }
+  footer a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+  @media (max-width: 600px) {
+    .wrap { padding: 40px 18px 60px; }
+    h1 { font-size: 32px; }
+    ul.feat { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="dot"></span>
+    <span class="brand">squadron</span>
+    <span class="sep"></span>
+    <span class="marker">/// alpha · invite-only</span>
+  </header>
+
+  <h1>A spatial multi-agent control plane <span class="accent">that runs on your machine.</span></h1>
+  <p class="subhead">
+    Agents live on a hex grid. They share a markdown vault, walk to each other,
+    talk through MCP tools. Karpathy-style LLM-Wiki memory. No cloud, no API keys
+    — your existing claude subscription runs the show.
+  </p>
+
+  <div class="install-box">
+    <div class="hint">Install (macOS · 60 seconds)</div>
+    <code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/m-luketin/squadron/main/install.sh | bash</code>
+    <button class="copy" type="button" onclick="copyInstall()">copy</button>
+  </div>
+
+  <section>
+    <h2><span class="marker-prefix">///</span> what it does</h2>
+    <ul class="feat">
+      <li><strong>Hex world.</strong> Spawn agents, drag them around, paint walls + routers.</li>
+      <li><strong>Memory graph.</strong> Each agent owns a markdown wiki. Karpathy LLM-Wiki layout by default.</li>
+      <li><strong>Walking.</strong> Agents pathfind around walls + each other to start a conversation.</li>
+      <li><strong>Skills.</strong> Install markdown capabilities from a starter library or any GitHub URL.</li>
+      <li><strong>Inter-agent comms.</strong> <code>send_to</code> / <code>read_neighbor_vault</code> / <code>move_toward</code> via MCP.</li>
+      <li><strong>Subscription billing.</strong> Uses your Pro/Max OAuth — no API-key surprise charges.</li>
+      <li><strong>Persistent.</strong> SQLite world; resume across restarts.</li>
+      <li><strong>OSS.</strong> All your data stays local. No telemetry beyond opt-in.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="marker-prefix">///</span> requirements</h2>
+    <div class="req">
+      <span>macOS</span>
+      <span>Bun 1.3+</span>
+      <span>claude-code CLI signed in</span>
+      <span>cloudflared (optional, remote access)</span>
+    </div>
+    <p style="color: var(--fg-muted); font-size: 14px; max-width: 640px;">
+      The installer above checks each of these and installs anything missing.
+      You'll be prompted to <code style="color:var(--accent)">claude auth login</code> mid-install if you aren't already signed in.
+    </p>
+  </section>
+
+  <section>
+    <h2><span class="marker-prefix">///</span> request access</h2>
+    <p style="color: var(--fg-muted); font-size: 14px; max-width: 640px;">
+      Closed alpha — drop your email and a one-line "what would you build with it" and you'll get the install link.
+    </p>
+    <form class="signup" id="signup-form" onsubmit="return submitSignup(event)">
+      <label for="email">email</label>
+      <input id="email" type="email" name="email" required placeholder="you@domain.com" />
+
+      <label for="purpose">what would you build with it (one line)</label>
+      <textarea id="purpose" name="purpose" required placeholder="e.g. design team that hands off to dev — wanna see if 4 specialized agents work better than one"></textarea>
+
+      <button type="submit">request invite</button>
+      <div class="hint">No newsletter, no spam. You'll either get an invite or a one-line "not yet, here's why".</div>
+    </form>
+  </section>
+
+  <footer>
+    <span>v0.1 · alpha</span>
+    <a href="https://github.com/m-luketin/squadron">github</a>
+    <span style="flex: 1"></span>
+    <span id="visit-marker">/// loaded</span>
+  </footer>
+</div>
+
+<script>
+function copyInstall() {
+  const txt = document.getElementById('install-cmd').textContent;
+  navigator.clipboard.writeText(txt).then(() => {
+    const b = document.querySelector('.install-box .copy');
+    const orig = b.textContent;
+    b.textContent = 'copied ✓';
+    setTimeout(() => { b.textContent = orig; }, 1400);
+  });
+}
+
+function submitSignup(e) {
+  e.preventDefault();
+  const data = {
+    email: document.getElementById('email').value.trim(),
+    purpose: document.getElementById('purpose').value.trim(),
+    ts: new Date().toISOString(),
+  };
+  // Default endpoint: a no-op — replace with a real form handler (Tally / Buttondown / a webhook).
+  // For now, mailto: fallback so it's at least functional out of the box.
+  const subject = 'squadron access request';
+  const body = `email: ${data.email}\nts: ${data.ts}\n\npurpose:\n${data.purpose}`;
+  window.location.href = 'mailto:matija@solbound.dev?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  return false;
+}
+</script>
+</body>
+</html>

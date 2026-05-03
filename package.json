@@ -1,0 +1,22 @@
+{
+  "name": "squadron",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "daemon": "bun --hot run daemon/index.ts",
+    "daemon:prod": "bun run daemon/index.ts",
+    "static": "bun run scripts/static.ts",
+    "up": "bash scripts/bringup.sh",
+    "down": "bash scripts/bringup.sh --kill",
+    "whitelist": "bun run scripts/whitelist.ts",
+    "scan": "bash scripts/scan-secrets.sh",
+    "scan:strict": "STRICT=1 bash scripts/scan-secrets.sh",
+    "install-hooks": "bash scripts/install-hooks.sh",
+    "test:client": "bun run scripts/test-client.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.5.0"
+  }
+}
