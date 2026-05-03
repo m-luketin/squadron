@@ -6,6 +6,7 @@
 
 import type { Worker } from "./agent-worker.ts";
 import { createWorker } from "./worker-factory.ts";
+import { DEFAULT_OPENROUTER_MODEL, getOpenRouterConfig, setOpenRouterConfig } from "./providers.ts";
 import {
   World,
   type AgentDto,
@@ -787,6 +788,39 @@ export function startServer(opts: StartServerOptions): RunningServer {
           if (fresh) broadcast({ type: "agent-updated", agent: fresh });
         }
         log(`[ws] uninstall-skill ${event.agentId} ${event.name} ${result.ok ? "ok" : "fail:" + result.error}`);
+        return;
+      }
+
+      case "set-openrouter-config": {
+        try {
+          if (!event.apiKey || typeof event.apiKey !== "string" || event.apiKey.trim().length < 10) {
+            sendOne(ws, { type: "openrouter-config-saved", ok: false, error: "apiKey missing or too short" });
+            return;
+          }
+          setOpenRouterConfig({
+            apiKey: event.apiKey.trim(),
+            model: typeof event.model === "string" && event.model.trim() ? event.model.trim() : DEFAULT_OPENROUTER_MODEL,
+          });
+          sendOne(ws, { type: "openrouter-config-saved", ok: true });
+          // Re-broadcast updated status so all clients can refresh their UI.
+          broadcast({
+            type: "providers-status",
+            openrouter: { configured: true, model: getOpenRouterConfig()?.model },
+          });
+          log(`[ws] set-openrouter-config saved (model=${getOpenRouterConfig()?.model})`);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          sendOne(ws, { type: "openrouter-config-saved", ok: false, error: msg });
+        }
+        return;
+      }
+
+      case "get-providers-status": {
+        const or = getOpenRouterConfig();
+        sendOne(ws, {
+          type: "providers-status",
+          openrouter: { configured: !!or, model: or?.model },
+        });
         return;
       }
 

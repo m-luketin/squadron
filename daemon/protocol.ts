@@ -68,7 +68,12 @@ export type ClientToDaemon =
   // M-Skills — install/uninstall a markdown skill in the agent's vault.
   // Daemon writes skills/<name>.md and atomically updates skills.md's wikilinks.
   | { type: "install-skill"; agentId: string; name: string; content: string }
-  | { type: "uninstall-skill"; agentId: string; name: string };
+  | { type: "uninstall-skill"; agentId: string; name: string }
+
+  // M-MultiModel — set per-provider config (currently only OpenRouter has a
+  // user-supplied key; claude + codex auth via their CLI's OAuth keychain).
+  | { type: "set-openrouter-config"; apiKey: string; model?: string }
+  | { type: "get-providers-status" };
 
 // ---------- Daemon → Client ----------
 
@@ -105,7 +110,11 @@ export type DaemonToClient =
   | { type: "agent-event"; agentId: string; event: ClaudeStreamEvent }
   | { type: "agent-stderr"; agentId: string; line: string }
   | { type: "agent-error"; agentId: string; error: string }
-  | { type: "agent-exited"; agentId: string; exitCode: number | null };
+  | { type: "agent-exited"; agentId: string; exitCode: number | null }
+
+  // M-MultiModel — provider config status / changes
+  | { type: "providers-status"; openrouter: { configured: boolean; model?: string } }
+  | { type: "openrouter-config-saved"; ok: boolean; error?: string };
 
 // ---------- Type guards ----------
 
@@ -126,6 +135,8 @@ const CLIENT_EVENT_TYPES = new Set([
   "move-vault-file",
   "install-skill",
   "uninstall-skill",
+  "set-openrouter-config",
+  "get-providers-status",
 ]);
 
 export function isClientToDaemon(x: unknown): x is ClientToDaemon {
