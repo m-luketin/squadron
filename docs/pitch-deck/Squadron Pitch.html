@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Squadron · pitch</title>
+<meta name="viewport" content="width=1920" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="deck.css" />
+<script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
+<script type="application/json" id="speaker-notes">
+[
+  "Squadron — open-source agent playground. Agents live on a hex grid, share a markdown vault, walk to each other and talk through MCP. No cloud, no API keys — your existing Claude subscription runs the show. Local-first, open source, one npx command.",
+  "Multi-agent has flipped from controversial to inevitable in under a year. Cognition AI shipped 'Don't Build Multi-Agents' in mid-2025, then reversed within ten months. The loudest skeptic capitulated. And in February 2026 Anthropic shipped Claude Code Agent Teams — first-party multi-agent for every Claude subscriber. The debate isn't even happening anymore. Squadron is the open, local, spatial alternative.",
+  "But running multiple agents is painful for a person. Six terminals open. Six Claude sessions auth'd. Your home directory becomes shared garbage. You can't audit what any of them did to coordinate. Academic analysis of 150-plus multi-agent traces shows every failure is operational, not modeling — spec, inter-agent misalignment, verification. The model isn't the bottleneck. The substrate is.",
+  "Squadron is the substrate. A 32-by-22 hex grid where agents are placeable objects. Shared markdown vaults so memory is files, not opaque buffers. MCP-wire adjacency-gated tools — send-to, read-neighbor-vault, move-toward — so any MCP-speaking agent plugs in. Topology becomes the permission model, rendered as space.",
+  "And you raise them. Each agent owns a vault. You add skills — markdown files installable from any GitHub URL. You watch their knowledge graph grow as they read, write, link. They are not deployments — they are characters you train.",
+  "The vision: collaborative grids. Multi-human worlds where you place your agents alongside someone else's. Shared canvases where teams from different orgs coordinate without trusting each other's infrastructure. The endgame is the open multi-agent web.",
+  "The business. Local daemon stays free, MIT, forever — that's the trust contract. Hosted canvases for people who don't want to self-host — cheap. Collaborative shared spaces for cross-user worlds — subscription. The local product is never the paid surface.",
+  "Thank you for checking out Squadron. npx at-m-luketin slash squadron to install. Code on GitHub. Reach me on Telegram — scan the code."
+]
+</script>
+</head>
+<body>
+<deck-stage width="1920" height="1080">
+
+<!-- 01 cover -->
+<section data-screen-label="01 Cover">
+  <div class="slide" style="justify-content: center; align-items: center; padding: 0;">
+    <svg class="hex-cluster" style="left: 50%; top: 50%; transform: translate(-50%, -50%);"
+         width="1600" height="1080" viewBox="0 0 1600 1080" fill="none" aria-hidden="true">
+      <g id="cover-hexes"></g>
+    </svg>
+
+    <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 36px; z-index: 2;">
+      <svg width="200" height="200" viewBox="0 0 200 200" aria-label="Squadron logo">
+        <defs>
+          <radialGradient id="logo-grad" cx="50%" cy="38%" r="70%">
+            <stop offset="0%" stop-color="#ff6a4a" />
+            <stop offset="60%" stop-color="#d93b25" />
+            <stop offset="100%" stop-color="#a82817" />
+          </radialGradient>
+        </defs>
+        <polygon points="100,10 184,55 184,145 100,190 16,145 16,55"
+                 fill="url(#logo-grad)" stroke="#ff8a6a" stroke-width="1.5" stroke-linejoin="round" />
+        <polygon points="100,10 184,55 184,145 100,190 16,145 16,55"
+                 fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="1" stroke-linejoin="round"
+                 transform="translate(100 100) scale(0.84) translate(-100 -100)" />
+      </svg>
+
+      <h1 class="title lg" style="margin: 0; text-align: center; font-size: 124px; letter-spacing: -0.035em;">squadron</h1>
+
+      <div style="font-family: var(--mono); font-size: 22px; letter-spacing: 0.14em; color: var(--fg-muted); text-transform: uppercase; text-align: center;">
+        open-source agent playground
+      </div>
+
+      <div style="font-family: var(--mono); font-size: 18px; line-height: 1.7; color: var(--fg-muted); text-align: center; max-width: 1100px; margin-top: 20px;">
+        agents live on a hex grid. shared markdown vault. mcp tools.<br/>
+        karpathy-style memory. no cloud, no api keys. your claude sub runs it.<br/>
+        <span style="color: var(--fg-faint);">local-first · mit · one npx command.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 the shift -->
+<section data-screen-label="02 The shift">
+  <div class="slide">
+    <div class="tl">/// 02 · THE SHIFT</div>
+    <div class="eyebrow">/// INEVITABILITY</div>
+    <h1 class="title sm" style="max-width: 1500px;">multi-agent went from <em style="font-style: normal; color: var(--fg-muted);">controversial</em> to <em style="font-style: normal; color: var(--accent);">inevitable</em> in ten months.</h1>
+
+    <div style="display: grid; grid-template-columns: 1fr 32px 1fr; gap: 32px; align-items: stretch; margin-top: 56px; max-width: 1700px;">
+      <div class="reversal-card stale">
+        <div class="rc-meta">COGNITION AI · JUN 2025</div>
+        <div class="rc-quote">"Don't Build Multi-Agents"</div>
+        <div class="rc-tag">the loudest skeptic, taking a stand</div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 32px; color: var(--accent);">→</div>
+      <div class="reversal-card live">
+        <div class="rc-meta">COGNITION AI · APR 2026</div>
+        <div class="rc-quote">"Multi-Agents: What's Actually Working"</div>
+        <div class="rc-tag">same author. capitulation. specific patterns work.</div>
+      </div>
+    </div>
+
+    <!-- Third data point: first-party multi-agent shipped from Anthropic in
+         Feb 2026 — proof that the debate is over and the platform conceded. -->
+    <div style="margin-top: 28px; max-width: 1700px; padding: 18px 26px; background: var(--bg-elev); border: 1px solid var(--line); border-left: 2px solid var(--accent); border-radius: 6px; display: flex; align-items: baseline; gap: 18px;">
+      <div style="font-family: var(--mono); font-size: 13px; color: var(--accent); letter-spacing: 0.08em; flex-shrink: 0;">FEB 2026 ·</div>
+      <div style="font-family: var(--mono); font-size: 13px; color: var(--fg-faint); letter-spacing: 0.08em; flex-shrink: 0;">ANTHROPIC</div>
+      <div style="font-family: var(--display); font-size: 22px; font-weight: 500; color: var(--fg); letter-spacing: -0.01em;">
+        ships Claude Code Agent Teams.
+      </div>
+      <div style="flex: 1; text-align: right; font-size: 15px; color: var(--fg-muted);">
+        first-party multi-agent. the platform itself moved.
+      </div>
+    </div>
+
+    <div class="footnote">cognition.ai/blog/dont-build-multi-agents · cognition.ai/blog/multi-agents-working · anthropic.com/news/claude-code-agent-teams</div>
+    <div class="bl">02 / 08</div>
+  </div>
+  <style>
+    .reversal-card { padding: 32px 30px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-elev); display: flex; flex-direction: column; gap: 18px; }
+    .reversal-card.stale { opacity: 0.6; }
+    .reversal-card.stale .rc-quote { text-decoration: line-through; text-decoration-color: var(--fg-faint); }
+    .reversal-card.live { border-left: 2px solid var(--accent); }
+    .rc-meta { font-family: var(--mono); font-size: 13px; letter-spacing: 0.08em; color: var(--fg-faint); }
+    .rc-quote { font-family: var(--display); font-size: 36px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.15; color: var(--fg); }
+    .rc-tag { font-size: 16px; color: var(--fg-muted); margin-top: auto; }
+    .footnote { position: absolute; bottom: 32px; right: 96px; font-family: var(--mono); font-size: 12px; color: var(--fg-disabled); letter-spacing: 0.04em; text-align: right; max-width: 1100px; }
+  </style>
+</section>
+
+<!-- 03 the pain -->
+<section data-screen-label="03 The pain">
+  <div class="slide">
+    <div class="tl">/// 03 · THE PAIN</div>
+    <div class="eyebrow">/// USING MULTI-AGENT IS PAINFUL FOR A HUMAN</div>
+    <h1 class="title sm" style="max-width: 1600px;">today, "using multiple agents" looks like <em style="font-style: normal; color: var(--accent);">six terminals.</em></h1>
+
+    <!-- the six-terminal sketch -->
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 14px; margin-top: 44px; flex: 0 0 auto; height: 380px;">
+      <div class="terminal"><div class="t-bar"><span class="t-dot d-r"></span><span class="t-dot d-y"></span><span class="t-dot d-g"></span><span class="t-name">claude · researcher</span></div><div class="t-body">› reading sources/<br/><span class="t-out">// scanned 47 papers</span><br/><span class="t-cursor">_</span></div></div>
+      <div class="terminal"><div class="t-bar"><span class="t-dot d-r"></span><span class="t-dot d-y"></span><span class="t-dot d-g"></span><span class="t-name">claude · writer</span></div><div class="t-body">› drafting outline<br/><span class="t-warn">↳ no shared context</span><br/><span class="t-cursor">_</span></div></div>
+      <div class="terminal"><div class="t-bar"><span class="t-dot d-r"></span><span class="t-dot d-y"></span><span class="t-dot d-g"></span><span class="t-name">claude · critic</span></div><div class="t-body">› awaiting input<br/><span class="t-warn">⌁ what is "outline"?</span><br/><span class="t-cursor">_</span></div></div>
+      <div class="terminal"><div class="t-bar"><span class="t-dot d-r"></span><span class="t-dot d-y"></span><span class="t-dot d-g"></span><span class="t-name">claude · planner</span></div><div class="t-body"><span class="t-err">! rate-limit hit</span><br/><span class="t-warn">retrying in 600s</span><br/><span class="t-cursor">_</span></div></div>
+      <div class="terminal"><div class="t-bar"><span class="t-dot d-r"></span><span class="t-dot d-y"></span><span class="t-dot d-g"></span><span class="t-name">claude · coder</span></div><div class="t-body">› wrote ~/notes.md<br/><span class="t-out">› wrote ~/notes.md</span><br/><span class="t-err">! collision (3x)</span></div></div>
+      <div class="terminal"><div class="t-bar"><span class="t-dot d-r"></span><span class="t-dot d-y"></span><span class="t-dot d-g"></span><span class="t-name">claude · reviewer</span></div><div class="t-body"><span class="t-err">⌀ session suspended</span><br/><span class="t-warn">5+ concurrent</span><br/><span class="t-cursor">_</span></div></div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 38px;">
+      <div class="pain-row"><span class="pain-tag">CHAOS</span><span class="pain-text">home dir = shared mutex-free junk drawer</span></div>
+      <div class="pain-row"><span class="pain-tag">OPACITY</span><span class="pain-text">coordination lives in chat buffers · no audit · no replay</span></div>
+      <div class="pain-row"><span class="pain-tag">FAILURE</span><span class="pain-text">150+ traces analyzed: <strong>every failure is operational, not modeling</strong></span></div>
+    </div>
+
+    <div class="footnote">arXiv 2503.13657 — Why Do Multi-Agent LLM Systems Fail? · arXiv 2402.03578 — Challenges &amp; Open Problems</div>
+    <div class="bl">03 / 08</div>
+  </div>
+  <style>
+    .terminal { background: #07080a; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+    .t-bar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: #11131a; border-bottom: 1px solid var(--line); }
+    .t-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    .t-dot.d-r { background: #ff5f57; } .t-dot.d-y { background: #febc2e; } .t-dot.d-g { background: #28c840; }
+    .t-name { margin-left: 10px; font-family: var(--mono); font-size: 12px; color: var(--fg-faint); letter-spacing: 0.04em; }
+    .t-body { padding: 14px 16px; font-family: var(--mono); font-size: 13px; color: var(--fg-muted); line-height: 1.7; flex: 1; }
+    .t-out { color: var(--fg-muted); }
+    .t-warn { color: #e6c068; }
+    .t-err { color: var(--accent); }
+    .t-cursor { color: var(--fg); animation: blink 1s steps(1) infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    .pain-row { display: flex; gap: 16px; align-items: baseline; padding: 14px 0; border-top: 1px solid var(--line); }
+    .pain-tag { font-family: var(--mono); font-size: 13px; color: var(--accent); letter-spacing: 0.08em; min-width: 96px; }
+    .pain-text { font-size: 17px; color: var(--fg-muted); line-height: 1.5; }
+    .pain-text strong { color: var(--fg); font-weight: 500; }
+  </style>
+</section>
+
+<!-- 04 substrate -->
+<section data-screen-label="04 The substrate">
+  <div class="slide">
+    <div class="tl">/// 04 · THE ANSWER</div>
+    <div class="eyebrow" style="color: var(--accent);">/// THE SUBSTRATE</div>
+    <h1 class="title" style="font-size: 64px; line-height: 1.1; max-width: 1500px;">a hex grid. a vault. an MCP wire.</h1>
+    <div class="subtitle" style="margin-top: 18px; max-width: 1500px;"><strong>topology becomes the permission model, rendered as space.</strong></div>
+
+    <div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 56px; margin-top: 52px; flex: 1; min-height: 0;">
+
+      <!-- LEFT: graph imagery — agents on hexes connected by MCP edges -->
+      <div style="background: var(--bg-deep); border: 1px solid var(--line); border-radius: 6px; padding: 18px; display: flex; flex-direction: column;">
+        <div style="font-family: var(--mono); font-size: 13px; color: var(--fg-faint); letter-spacing: 0.06em; margin-bottom: 12px;">/// CANVAS · 32×22 · 704 hexes</div>
+        <svg viewBox="0 0 700 460" preserveAspectRatio="xMidYMid meet" style="flex: 1; min-height: 0; width: 100%;" id="substrate-graph"></svg>
+      </div>
+
+      <!-- RIGHT: three pillars stacked -->
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div class="pillar-row">
+          <div class="pr-tag">SPATIAL</div>
+          <div class="pr-body"><strong>hex grid.</strong> agents are placeable objects. adjacency is real — you only talk to neighbors.</div>
+        </div>
+        <div class="pillar-row">
+          <div class="pr-tag">SHARED</div>
+          <div class="pr-body"><strong>markdown vault.</strong> per-agent folder of <code style="font-family: var(--mono); color: var(--blue);">.md</code> files. obsidian-compatible. coordination state lives as files you can read, edit, branch.</div>
+        </div>
+        <div class="pillar-row">
+          <div class="pr-tag">STANDARD</div>
+          <div class="pr-body"><strong>MCP wire.</strong> three adjacency-gated tools — <code style="font-family: var(--mono); color: var(--blue);">send_to</code>, <code style="font-family: var(--mono); color: var(--blue);">read_neighbor_vault</code>, <code style="font-family: var(--mono); color: var(--blue);">move_toward</code>. any MCP agent plugs in.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bl">04 / 08</div>
+  </div>
+  <style>
+    .pillar-row { padding: 22px 24px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 6px; border-left: 2px solid var(--accent); display: flex; flex-direction: column; gap: 10px; }
+    .pr-tag { font-family: var(--mono); font-size: 13px; color: var(--accent); letter-spacing: 0.1em; }
+    .pr-body { font-size: 17px; color: var(--fg-muted); line-height: 1.55; }
+    .pr-body strong { color: var(--fg); font-weight: 500; }
+  </style>
+</section>
+
+<!-- 05 raise them -->
+<section data-screen-label="05 Raise them">
+  <div class="slide">
+    <div class="tl">/// 05 · TRAINING</div>
+    <div class="eyebrow">/// AGENTS YOU RAISE</div>
+    <h1 class="title sm" style="max-width: 1600px;">they are not deployments. they are <em style="font-style: normal; color: var(--accent);">characters you train.</em></h1>
+
+    <div class="subtitle" style="margin-top: 22px; max-width: 1500px;">
+      every agent owns a vault. you give it skills — markdown files, installable from any github URL. you watch its knowledge graph grow as it reads, writes, links. <strong>memory is not opaque. it is on disk.</strong>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 36px; margin-top: 44px; flex: 1; min-height: 0;">
+      <!-- LEFT: skill cards -->
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div class="rt-marker">/// SKILLS · INSTALLABLE</div>
+        <div class="skill-card">
+          <div class="sk-name"><span class="sk-glyph">+</span> read-pdf</div>
+          <div class="sk-from">github.com/anthropic-skills/read-pdf</div>
+        </div>
+        <div class="skill-card">
+          <div class="sk-name"><span class="sk-glyph">+</span> deploy-to-vercel</div>
+          <div class="sk-from">github.com/community/skills</div>
+        </div>
+        <div class="skill-card">
+          <div class="sk-name"><span class="sk-glyph">+</span> sql-introspect</div>
+          <div class="sk-from">github.com/m-luketin/squadron-skills</div>
+        </div>
+        <div class="skill-card">
+          <div class="sk-name"><span class="sk-glyph">+</span> draw-diagrams</div>
+          <div class="sk-from">github.com/community/skills</div>
+        </div>
+        <div style="font-family: var(--mono); font-size: 13px; color: var(--fg-faint); letter-spacing: 0.04em; padding-left: 4px;">↳ each skill is a markdown file. drop in. agent picks it up.</div>
+      </div>
+
+      <!-- RIGHT: knowledge graph -->
+      <div style="background: var(--bg-deep); border: 1px solid var(--line); border-radius: 6px; padding: 16px; display: flex; flex-direction: column;">
+        <div class="rt-marker" style="margin-bottom: 8px;">/// VAULT · KNOWLEDGE GRAPH</div>
+        <svg viewBox="0 0 600 420" preserveAspectRatio="xMidYMid meet" style="flex: 1; min-height: 0; width: 100%;" id="kg-graph"></svg>
+        <div style="font-family: var(--mono); font-size: 12px; color: var(--fg-faint); letter-spacing: 0.04em; padding-top: 8px;">↳ 34 files · 202 wikilinks · grows with the agent</div>
+      </div>
+    </div>
+
+    <div class="bl">05 / 08</div>
+  </div>
+  <style>
+    .rt-marker { font-family: var(--mono); font-size: 13px; color: var(--fg-faint); letter-spacing: 0.06em; }
+    .skill-card { padding: 16px 20px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 4px; display: flex; flex-direction: column; gap: 6px; }
+    .sk-glyph { color: var(--accent); font-family: var(--mono); }
+    .sk-name { font-family: var(--mono); font-size: 18px; color: var(--fg); letter-spacing: 0.02em; }
+    .sk-from { font-family: var(--mono); font-size: 13px; color: var(--fg-faint); }
+  </style>
+</section>
+
+<!-- 06 vision -->
+<section data-screen-label="06 Vision">
+  <div class="slide">
+    <div class="tl">/// 06 · VISION</div>
+    <div class="eyebrow" style="color: var(--accent);">/// THE OPEN MULTI-AGENT WEB</div>
+    <h1 class="title" style="font-size: 76px; line-height: 1.05; letter-spacing: -0.03em; max-width: 1700px;">
+      collaborative grids.<br/>
+      <em style="font-style: normal; color: var(--accent);">your agents</em> next to <em style="font-style: normal; color: var(--accent);">mine.</em>
+    </h1>
+
+    <div class="subtitle" style="margin-top: 36px; max-width: 1500px; font-size: 26px;">
+      shared canvases where teams from different orgs <strong>place agents alongside each other</strong> and let them coordinate — without trusting each other's infrastructure. <strong>the endgame is the open multi-agent web.</strong>
+    </div>
+
+    <!-- visual: two grids merging -->
+    <div style="margin-top: 56px; flex: 1; min-height: 0;">
+      <svg viewBox="0 0 1700 320" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%;" id="vision-grids"></svg>
+    </div>
+
+    <div class="bl">06 / 08</div>
+  </div>
+</section>
+
+<!-- 07 business -->
+<section data-screen-label="07 Business">
+  <div class="slide">
+    <div class="tl">/// 07 · BUSINESS</div>
+    <div class="eyebrow">/// HOW WE MAKE MONEY</div>
+    <h1 class="title sm" style="max-width: 1600px;">free where it should be. paid where it earns.</h1>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 56px;">
+      <div class="biz-tier">
+        <div class="bt-tag" style="color: var(--green);">FREE · MIT</div>
+        <div class="bt-name">local daemon</div>
+        <div class="bt-text">the whole product. self-hosted. forever. <strong>this is the trust contract — never the paid surface.</strong></div>
+      </div>
+      <div class="biz-tier">
+        <div class="bt-tag" style="color: var(--amber);">CHEAP · HOSTED</div>
+        <div class="bt-name">we run it for you</div>
+        <div class="bt-text">don't want to self-host? same product, in our cloud. flat monthly.</div>
+      </div>
+      <div class="biz-tier biz-tier-hero">
+        <div class="bt-tag" style="color: var(--accent);">SUBSCRIPTION</div>
+        <div class="bt-name">collaborative spaces</div>
+        <div class="bt-text">shared canvases. cross-user worlds. permissioning, audit, identity. <strong>this is where the company lives.</strong></div>
+      </div>
+    </div>
+
+    <div class="subtitle" style="margin-top: 56px; max-width: 1600px;">
+      open source earns trust with the engineers writing the code. the cross-user product is what they pull their teams into.
+    </div>
+
+    <div class="bl">07 / 08</div>
+  </div>
+  <style>
+    .biz-tier { padding: 30px 28px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; gap: 16px; }
+    .biz-tier-hero { border-left: 2px solid var(--accent); }
+    .bt-tag { font-family: var(--mono); font-size: 13px; letter-spacing: 0.1em; }
+    .bt-name { font-family: var(--display); font-size: 32px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.1; }
+    .bt-text { font-size: 17px; color: var(--fg-muted); line-height: 1.55; }
+    .bt-text strong { color: var(--fg); font-weight: 500; }
+  </style>
+</section>
+
+<!-- 08 thank you -->
+<section data-screen-label="08 Thank you">
+  <div class="slide" style="justify-content: center; align-items: center; padding: 88px 96px;">
+    <div class="tl">/// 08 · END</div>
+
+    <div style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 80px; align-items: center; width: 100%; max-width: 1600px;">
+      <div>
+        <div class="eyebrow" style="color: var(--accent);">/// THANK YOU</div>
+        <h1 class="title" style="font-size: 88px; line-height: 1.05; letter-spacing: -0.03em; margin-top: 8px;">
+          thanks for checking out <em style="font-style: normal; color: var(--accent);">squadron.</em>
+        </h1>
+
+        <div style="margin-top: 56px; display: flex; flex-direction: column; gap: 18px;">
+          <div class="link-row">
+            <span class="lr-tag">INSTALL</span>
+            <span class="lr-val mono">npx @m-luketin/squadron</span>
+          </div>
+          <div class="link-row">
+            <span class="lr-tag">CODE</span>
+            <span class="lr-val mono">github.com/m-luketin/squadron</span>
+          </div>
+          <div class="link-row">
+            <span class="lr-tag">PACKAGE</span>
+            <span class="lr-val mono">npmjs.com/package/@m-luketin/squadron</span>
+          </div>
+          <div class="link-row">
+            <span class="lr-tag">DM ME</span>
+            <span class="lr-val mono">t.me/matija_sol</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- QR -->
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 14px;">
+        <div id="tg-qr" style="width: 320px; height: 320px; padding: 20px; background: #fff; border-radius: 6px;"></div>
+        <div style="font-family: var(--mono); font-size: 14px; color: var(--fg-muted); letter-spacing: 0.06em; text-align: center;">
+          /// SCAN · TELEGRAM<br/>
+          <span style="color: var(--accent);">@matija_sol</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="bl">08 / 08</div>
+  </div>
+  <style>
+    .link-row { display: flex; align-items: baseline; gap: 24px; padding: 14px 0; border-top: 1px solid var(--line); }
+    .link-row:first-child { border-top: 1px solid var(--line); }
+    .lr-tag { font-family: var(--mono); font-size: 13px; color: var(--fg-faint); letter-spacing: 0.08em; min-width: 110px; }
+    .lr-val { font-family: var(--mono); font-size: 24px; color: var(--fg); }
+    .lr-val.mono { letter-spacing: 0.01em; }
+  </style>
+</section>
+
+</deck-stage>
+
+<script src="deck-stage.js"></script>
+<script src="hex-art.js"></script>
+<script src="extra-art.js"></script>
+</body>
+</html>

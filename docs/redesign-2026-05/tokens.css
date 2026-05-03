@@ -1,0 +1,109 @@
+/* =============================================================
+   SOLBOUND.DEV — Design Tokens
+   The full source of truth for color, type, spacing, motion.
+   Import once, use the variables. Don't redefine inline.
+   ============================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@400;500;600;700;800&display=swap');
+
+:root {
+  /* ---------- COLOR ---------- */
+  /* Canvas — true black, never #000. The site is monochrome
+     until red enters as a single, deliberate accent. */
+  --sb-bg:           #0a0a0a;   /* page canvas (= neutral-950) */
+  --sb-bg-elev:      #111111;   /* hover lifts, sticky bars (= neutral-900) */
+  --sb-surface:      rgba(255,255,255,0.02);  /* card fills */
+  --sb-surface-2:    rgba(255,255,255,0.03);  /* hover state */
+
+  /* Hairlines — never solid, always alpha. The 10% white rule
+     is the entire structural language of the site. */
+  --sb-line:         rgba(255,255,255,0.10);
+  --sb-line-soft:    rgba(255,255,255,0.05);
+  --sb-line-faint:   rgba(255,255,255,0.02);
+
+  /* Text — four steps, that's it. */
+  --sb-fg:           #ffffff;
+  --sb-fg-muted:     #a3a3a3;   /* neutral-400/500 */
+  --sb-fg-faint:     #737373;   /* neutral-500 hover-state */
+  --sb-fg-disabled:  #525252;   /* neutral-600 */
+
+  /* Accent — used SPARINGLY. One red moment per viewport.
+     Hover state of a single CTA. The numbered marker. The
+     active orbit logo. Don't paint the page red. */
+  --sb-accent:       #d93b25;   /* primary red, the brand */
+  --sb-accent-deep:  #b8301e;   /* button base, links rest */
+  --sb-accent-hot:   #e5685a;   /* gradient end, soft pairing */
+  --sb-accent-glow:  rgba(217,59,37,0.30);  /* shadow / aura */
+  --sb-accent-wash:  rgba(217,59,37,0.05);  /* very subtle field */
+
+  /* ---------- TYPE ---------- */
+  --sb-font-display: 'Syne', ui-sans-serif, system-ui, sans-serif;
+  --sb-font-body:    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --sb-font-mono:    ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Hero — the only place the type goes monumental. */
+  --sb-text-huge:    clamp(2.5rem, 12vw, 18rem);
+
+  /* Section H2 — Syne medium, tight tracking, always 500. */
+  --sb-text-h2:      1.875rem;   /* text-3xl */
+  --sb-text-cta:     clamp(2rem, 4vw, 3.25rem);
+
+  /* Card / list headers */
+  --sb-text-h3:      1.25rem;    /* text-xl, uppercase, tracked */
+
+  /* Body */
+  --sb-text-body:    0.875rem;   /* text-sm — most paragraph copy */
+  --sb-text-meta:    0.75rem;    /* text-xs — captions, role labels */
+  --sb-text-eyebrow: 0.6875rem;  /* the all-caps tag at top of cards */
+
+  /* ---------- SPACING & RADII ---------- */
+  --sb-r-sm:  0.25rem;   /* 4 — chips, mini-bars */
+  --sb-r-md:  0.5rem;    /* 8 — most cards */
+  --sb-r-lg:  0.75rem;   /* 12 — feature panels */
+  --sb-r-xl:  1rem;      /* 16 — fullscreen hero windows */
+
+  /* Section content sits in this rail, edge-to-edge below 1800px. */
+  --sb-rail-max: 1800px;
+
+  /* Card padding — the entire site uses p-8 (2rem) by default,
+     1.5rem on mobile. */
+  --sb-pad-card:        2rem;
+  --sb-pad-card-mobile: 1.5rem;
+
+  /* ---------- ELEVATION ---------- */
+  /* The site doesn't use drop shadows for elevation — it uses
+     borders + subtle white surface tints. These are reserved
+     for floating UI (chips that hover over charts, etc.). */
+  --sb-shadow-chip: 0 8px 24px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05);
+  --sb-shadow-2xl: 0 25px 50px -12px rgba(0,0,0,0.8);
+  --sb-glow-red:   0 0 20px var(--sb-accent-glow);
+
+  /* ---------- MOTION ---------- */
+  --sb-ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --sb-ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --sb-dur-fast:    200ms;
+  --sb-dur-base:    300ms;
+  --sb-dur-slow:    500ms;
+}
+
+/* =============================================================
+   Page baseline. Apply to the <html> or top container of any
+   solbound.dev page. Sets the dark canvas, default fonts, and
+   the antialiasing the site relies on.
+   ============================================================= */
+.sb-page {
+  background: var(--sb-bg);
+  color: var(--sb-fg);
+  font-family: var(--sb-font-body);
+  font-feature-settings: 'ss01', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* The 1800px rail every section content sits in. */
+.sb-rail {
+  max-width: var(--sb-rail-max);
+  margin: 0 auto;
+  width: 100%;
+}
