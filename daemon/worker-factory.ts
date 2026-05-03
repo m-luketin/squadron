@@ -6,6 +6,7 @@
 // behind feature flags as their workers land.
 
 import { AgentWorker, type AgentWorkerInit, type Worker } from "./agent-worker.ts";
+import { OpenRouterWorker } from "./openrouter-worker.ts";
 
 export type Provider = "claude" | "codex" | "openrouter";
 
@@ -13,10 +14,10 @@ export function createWorker(provider: Provider, init: AgentWorkerInit): Worker 
   switch (provider) {
     case "claude":
       return new AgentWorker(init);
+    case "openrouter":
+      return new OpenRouterWorker(init);
     case "codex":
       throw new Error("codex provider not yet implemented (M-MultiModel phase 3)");
-    case "openrouter":
-      throw new Error("openrouter provider not yet implemented (M-MultiModel phase 2)");
     default: {
       // Exhaustive-check guard: TS will error here if a new Provider value is added without a case.
       const _exhaustive: never = provider;
