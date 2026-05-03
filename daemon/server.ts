@@ -231,7 +231,7 @@ export function startServer(opts: StartServerOptions): RunningServer {
    * B's subprocess so it can react without user mediation. Bounded by:
    *   - global autonomy switch
    *   - per-pair throttle (1.5s)
-   *   - per-pair turn budget (6 consecutive — resets on any user manual message)
+   *   - per-pair turn budget (4 consecutive — resets on any user manual message)
    */
   function maybeAutoTrigger(m: InterAgentMessageDto): void {
     if (!autonomyEnabled) return;
@@ -302,10 +302,12 @@ export function startServer(opts: StartServerOptions): RunningServer {
   }
 
   // ---- Walking (M6 — autonomous movement) ----
-  /** In-flight walks. Stepping happens server-side; LLM gets one MCP-tool result + one auto-prompt on arrival. */
+  /** In-flight walks. Stepping happens server-side; LLM gets one MCP-tool result + one auto-prompt on arrival.
+   *  Either targetId (walk to another agent) OR targetHex (walk to a coord) is set, never both. */
   interface Walk {
     callerId: string;
-    targetId: string;
+    targetId?: string;
+    targetHex?: { q: number; r: number };
     timer: ReturnType<typeof setTimeout> | null;
     blockedTicks: number;
   }
@@ -354,6 +356,28 @@ export function startServer(opts: StartServerOptions): RunningServer {
       log(`[walk] start ${caller.name} → ${target.name} (${path.length} hops)`);
       return { ok: true, hops: path.length, etaMs: path.length * WALK_STEP_MS };
     },
+    startWalkToHex(callerId: string, q: number, r: number) {
+      const caller = world.agent(callerId);
+      if (!caller) return { ok: false, reason: "agent not found" };
+
+      stopWalk(callerId);
+
+      const result = world.findPathToHex(caller.q, caller.r, q, r, { ignoreAgentIds: new Set([callerId]) });
+      if (!result.ok) return { ok: false, reason: result.reason ?? "no path" };
+
+      const path = result.path ?? [];
+      if (path.length === 0) {
+        // Already at the destination.
+        return { ok: true, hops: 0, etaMs: 0 };
+      }
+
+      world.updateAgent(callerId, { state: "moving" });
+      const walk: Walk = { callerId, targetHex: { q, r }, timer: null, blockedTicks: 0 };
+      walks.set(callerId, walk);
+      walk.timer = setTimeout(() => stepWalk(callerId), WALK_STEP_MS);
+      log(`[walk] start ${caller.name} → hex (q=${q}, r=${r}) (${path.length} hops)`);
+      return { ok: true, hops: path.length, etaMs: path.length * WALK_STEP_MS };
+    },
   };
 
   /** Advance one hex along the path, then schedule the next step. Re-paths every tick. */
@@ -361,8 +385,39 @@ export function startServer(opts: StartServerOptions): RunningServer {
     const walk = walks.get(agentId);
     if (!walk) return;
     const caller = world.agent(agentId);
-    const target = world.agent(walk.targetId);
     if (!caller) return;
+
+    // Hex-coord walk path — separate logic since there's no target agent and
+    // arrival is "we're standing on the destination hex" rather than adjacent.
+    if (walk.targetHex) {
+      const t = walk.targetHex;
+      if (caller.q === t.q && caller.r === t.r) {
+        onArrivedHex(agentId, t.q, t.r);
+        return;
+      }
+      const result = world.findPathToHex(caller.q, caller.r, t.q, t.r, { ignoreAgentIds: new Set([agentId]) });
+      if (!result.ok || !result.path || result.path.length === 0) {
+        stopWalk(agentId, { reason: `[Walk halted at hex (q=${caller.q}, r=${caller.r}): ${result.reason ?? "no path"}.]` });
+        return;
+      }
+      const next = result.path[0]!;
+      if (world.isHexBlockedForMove(next.q, next.r, agentId)) {
+        walk.blockedTicks += 1;
+        if (walk.blockedTicks >= WALK_BLOCKED_MAX) {
+          stopWalk(agentId, { reason: `[Walk halted at hex (q=${caller.q}, r=${caller.r}): next hex blocked too long.]` });
+          return;
+        }
+        walk.timer = setTimeout(() => stepWalk(agentId), WALK_STEP_MS);
+        return;
+      }
+      walk.blockedTicks = 0;
+      world.updateAgent(agentId, { q: next.q, r: next.r, state: "moving" });
+      walk.timer = setTimeout(() => stepWalk(agentId), WALK_STEP_MS);
+      return;
+    }
+
+    // Default: walk-to-agent path.
+    const target = walk.targetId ? world.agent(walk.targetId) : null;
     if (!target) {
       stopWalk(agentId, { reason: "[Walk halted: target agent no longer exists.]" });
       return;
@@ -372,12 +427,12 @@ export function startServer(opts: StartServerOptions): RunningServer {
     const adjOffsets = [[+1, 0], [+1, -1], [0, -1], [-1, 0], [-1, +1], [0, +1]];
     const adjacent = adjOffsets.some(([dq, dr]) => caller.q + dq === target.q && caller.r + dr === target.r);
     if (adjacent) {
-      onArrived(agentId, walk.targetId);
+      onArrived(agentId, walk.targetId!);
       return;
     }
 
     // Re-path every tick (cheap; handles target moving and walls placed mid-walk).
-    const result = world.findPath(caller.q, caller.r, walk.targetId, { ignoreAgentIds: new Set([agentId]) });
+    const result = world.findPath(caller.q, caller.r, walk.targetId!, { ignoreAgentIds: new Set([agentId]) });
     if (!result.ok || !result.path || result.path.length === 0) {
       stopWalk(agentId, { reason: `[Walk halted at hex (q=${caller.q}, r=${caller.r}): ${result.reason ?? "no path"}.]` });
       return;
@@ -397,6 +452,20 @@ export function startServer(opts: StartServerOptions): RunningServer {
     walk.blockedTicks = 0;
     world.updateAgent(agentId, { q: next.q, r: next.r, state: "moving" });
     walk.timer = setTimeout(() => stepWalk(agentId), WALK_STEP_MS);
+  }
+
+  /** Hex-coord arrival: just stop and log. No auto-prompt — there's no other agent to interact with. */
+  function onArrivedHex(agentId: string, q: number, r: number): void {
+    const caller = world.agent(agentId);
+    walks.delete(agentId);
+    world.updateAgent(agentId, { state: "idle" });
+    if (!caller) return;
+    world.appendMessage(agentId, {
+      side: "sys",
+      who: "system",
+      text: `arrived at hex (q=${q}, r=${r})`,
+    });
+    log(`[walk] arrived ${caller.name} → hex (q=${q}, r=${r})`);
   }
 
   /** Walker landed adjacent to target. Auto-prompt the agent to actually start the conversation. */
@@ -534,6 +603,26 @@ export function startServer(opts: StartServerOptions): RunningServer {
         );
       }
       // M3: MCP endpoints — /mcp/agent/<id>
+      // Same whitelist gate as the WS upgrade. In OPEN mode (no tokens
+      // configured) `validateWhitelistToken` returns ok=true so local-only
+      // setups keep working without ceremony. In GATED mode the request must
+      // carry ?token=<one-of-them>. Loopback callers (the local claude
+      // subprocess on this machine) are exempt — without that exemption the
+      // agent's own MCP tool calls would 401 the moment whitelist gating
+      // turns on. The exemption is safe because the daemon binds 127.0.0.1
+      // only; the only way to reach loopback from outside is via the
+      // cloudflared tunnel (which terminates with a non-loopback peer IP).
+      if (url.pathname.startsWith("/mcp/")) {
+        const peer = server.requestIP(req);
+        const isLoopback = peer && (peer.address === "127.0.0.1" || peer.address === "::1");
+        if (!isLoopback) {
+          const mcpToken = url.searchParams.get("token");
+          const mcpAuth = validateWhitelistToken(mcpToken);
+          if (!mcpAuth.ok) {
+            return new Response("unauthorized", { status: 401 });
+          }
+        }
+      }
       const mcpResp = await handleMcpRequest(req, world, mover);
       if (mcpResp) return mcpResp;
       return new Response("not found", { status: 404 });

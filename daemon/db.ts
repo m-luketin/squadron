@@ -76,11 +76,7 @@ export interface Statements {
   getAgents:          Statement<AgentRow, []>;
   getAgentById:       Statement<AgentRow, [string]>;
   getLiveAgents:      Statement<AgentRow, []>;
-  setStatus:          Statement<unknown, [AgentStatus, string, string]>;     // status, updated_at, id
-  setState:           Statement<unknown, [AgentState, string, string]>;
-  setSessionId:       Statement<unknown, [string | null, string, string]>;   // session_id, updated_at, id
   insertMessage:      Statement<unknown, [string, string, string | null, string, string]>;
-  getMessagesByAgent: Statement<MessageRow, [string]>;
   getAllMessages:     Statement<MessageRow, []>;
   getAgentTelemetry:  Statement<{ msgs: number; lastAt: string | null }, [string]>;
 
@@ -203,15 +199,9 @@ export function openDb(): OpenDbResult {
     getAgents:          db.prepare(`SELECT * FROM agents ORDER BY created_at ASC`),
     getAgentById:       db.prepare(`SELECT * FROM agents WHERE id = ?`),
     getLiveAgents:      db.prepare(`SELECT * FROM agents WHERE status = 'Live' ORDER BY created_at ASC`),
-    setStatus:          db.prepare(`UPDATE agents SET status = ?, updated_at = ? WHERE id = ?`),
-    setState:           db.prepare(`UPDATE agents SET state = ?, updated_at = ? WHERE id = ?`),
-    setSessionId:       db.prepare(`UPDATE agents SET session_id = ?, updated_at = ? WHERE id = ?`),
     insertMessage:      db.prepare(
       `INSERT INTO messages (agent_id, side, who, text, created_at)
        VALUES (?, ?, ?, ?, ?)`
-    ),
-    getMessagesByAgent: db.prepare(
-      `SELECT * FROM messages WHERE agent_id = ? ORDER BY id ASC`
     ),
     getAllMessages:     db.prepare(`SELECT * FROM messages ORDER BY agent_id, id ASC`),
     getAgentTelemetry:  db.prepare(`SELECT COUNT(*) AS msgs, MAX(created_at) AS lastAt FROM messages WHERE agent_id = ?`),
