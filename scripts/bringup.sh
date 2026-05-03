@@ -58,6 +58,10 @@ if [[ "${SKIP_TUNNELS:-}" == "1" ]]; then
   echo
   echo "Done (local-only). Browser URL:"
   echo "  http://localhost:8787/Squadron.html?daemon=ws://localhost:7878/ws"
+  echo
+  echo "Local-only: daemon binds 127.0.0.1, not reachable from internet or LAN."
+  echo "To expose via cloudflared tunnels, restart with --public:"
+  echo "  npx @m-luketin/squadron --public"
   exit 0
 fi
 
@@ -86,10 +90,23 @@ fi
 # Convert https:// → wss:// for the daemon URL
 DAEMON_WS="${DAEMON_URL/https:/wss:}"
 
+# If the parent process generated a public-mode whitelist token, append it to
+# the URL so the user gets a single ready-to-use link with auth baked in.
+TOKEN_QS=""
+if [[ -n "${SQUADRON_PUBLIC_TOKEN:-}" ]]; then
+  TOKEN_QS="&token=${SQUADRON_PUBLIC_TOKEN}"
+fi
+
 echo
-echo "=== Squadron is up ==="
+echo "=== Squadron is up — PUBLIC ==="
 echo "Open in your browser:"
 echo
-echo "  $STATIC_URL/Squadron.html?daemon=$DAEMON_WS/ws"
+echo "  $STATIC_URL/Squadron.html?daemon=$DAEMON_WS/ws$TOKEN_QS"
 echo
+if [[ -n "${SQUADRON_PUBLIC_TOKEN:-}" ]]; then
+  echo "WARNING: this URL includes a whitelist token — anyone with the link can"
+  echo "control your agents. Treat it like a password. Revoke any time:"
+  echo "  bun run whitelist revoke ${SQUADRON_PUBLIC_TOKEN}"
+  echo
+fi
 echo "Stop everything with:  bash scripts/bringup.sh --kill"

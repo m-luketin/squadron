@@ -12,10 +12,15 @@
 
 import { resolve, join, normalize } from "node:path";
 import { homedir } from "node:os";
+import { validate as validateWhitelist } from "../daemon/whitelist";
 
 const ROOT = resolve(import.meta.dir, "../ui");
 const VAULTS_ROOT = join(homedir(), ".hexagent", "agents");
 const PORT = Number(process.env.PORT ?? 8787);
+// Local-only by default. Opt into LAN exposure with SQUADRON_STATIC_HOST=0.0.0.0
+// (or any other interface). Public reachability is layered separately via
+// cloudflared in bin/squadron.js, which is opt-in/gated.
+const HOSTNAME = process.env.SQUADRON_STATIC_HOST ?? "127.0.0.1";
 
 const TYPES: Record<string, string> = {
   ".html":  "text/html; charset=utf-8",
@@ -62,12 +67,22 @@ function mimeFor(path: string): string {
 
 Bun.serve({
   port: PORT,
+  hostname: HOSTNAME,
   async fetch(req) {
     const url = new URL(req.url);
 
     // Vault route: /vault/<agentId>/<path...>
+    // Gated by the same whitelist the daemon WS uses. In OPEN mode (no tokens
+    // configured) `validateWhitelist` returns ok=true so local-only setups
+    // keep working without ceremony. In GATED mode (any tokens present) the
+    // request must carry ?token=<one-of-them>.
     const vaultMatch = url.pathname.match(/^\/vault\/([0-9a-f-]{36})(\/.*)?$/);
     if (vaultMatch) {
+      const presented = url.searchParams.get("token");
+      const auth = validateWhitelist(presented);
+      if (!auth.ok) {
+        return new Response("Unauthorized — pass ?token=<whitelist token>", { status: 401 });
+      }
       const agentId = vaultMatch[1]!;
       const inner = vaultMatch[2] ?? "/";
       const vaultRoot = join(VAULTS_ROOT, agentId, "vault");
@@ -94,6 +109,10 @@ Bun.serve({
     const headers = new Headers({
       "content-type": mimeFor(full),
       "access-control-allow-origin": "*",
+      // No browser cache — this is a dev/alpha-shaped product where the static
+      // server serves the live working tree (debug-mode symlinks). Stale HTML
+      // would prevent users from picking up the latest JSX cache-busters.
+      "cache-control": "no-cache, no-store, must-revalidate",
     });
     return new Response(file, { headers });
   },
