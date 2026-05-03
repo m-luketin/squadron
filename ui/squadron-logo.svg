@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="Squadron">
+  <defs>
+    <radialGradient id="sq-grad" cx="50%" cy="38%" r="70%">
+      <stop offset="0%" stop-color="#ff6a4a"></stop>
+      <stop offset="60%" stop-color="#d93b25"></stop>
+      <stop offset="100%" stop-color="#a82817"></stop>
+    </radialGradient>
+  </defs>
+  
+  <polygon points="100,8 184,54 184,146 100,192 16,146 16,54" fill="url(#sq-grad)" stroke="#ff8a6a" stroke-width="1.4"></polygon>
+  
+  <polygon points="100,8 184,54 184,146 100,192 16,146 16,54" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1" transform="translate(100,100) scale(0.86) translate(-100,-100)"></polygon>
+</svg>

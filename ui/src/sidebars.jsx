@@ -193,14 +193,14 @@ function TypingDots({ name, state, color }) {
       {name && <div className="who" style={{ color }}>{name}</div>}
       <div className="bubble" style={{
         display: 'inline-flex', gap: 6, alignItems: 'center',
-        background: color ? color + '14' : undefined,
-        borderColor: color ? color + '88' : undefined,
+        background: color ? color + '12' : undefined,
+        borderColor: color ? color + '40' : undefined,
         opacity: 0.95,
       }}>
         <span style={{ fontSize: '0.85em', opacity: 0.75, marginRight: 2 }}>{label}</span>
         <span className="typing-dot" style={{ background: accent, animationDelay: '0s' }} />
-        <span className="typing-dot" style={{ background: accent, animationDelay: '0.18s' }} />
-        <span className="typing-dot" style={{ background: accent, animationDelay: '0.36s' }} />
+        <span className="typing-dot" style={{ background: accent, animationDelay: '0.2s' }} />
+        <span className="typing-dot" style={{ background: accent, animationDelay: '0.4s' }} />
       </div>
     </div>
   );
@@ -295,7 +295,7 @@ function ChatView({ conversation, agents, onBack, onSend, loopFlag, messages: re
           // Tint the bubble with the agent's color when known. 'you' keeps its
           // brand-red treatment from the existing CSS class.
           const bubbleStyle = (m.side === 'them' && color)
-            ? { background: color + '14', borderColor: color + '88' }
+            ? { background: color + '0F', borderColor: color + '30' }
             : undefined;
 
           const cls = alignSide === 'right' || alignSide === 'left'
@@ -386,6 +386,70 @@ function ChatView({ conversation, agents, onBack, onSend, loopFlag, messages: re
 //   onBackgroundClick optional () => void — fired on click of empty space (no node, no pan-drag).
 //                     Used by the sidebar variant to expand into a center-tab.
 //   onNodeContextMenu optional (file, screenX, screenY) => void — right-click on a node
+// Heuristic file-kind classifier for memory graph styling. Maps a vault path
+// to one of the kinds the May 2026 redesign tokens cover. Per the Karpathy
+// LLM-Wiki default seed structure (index.md / log.md / entities/ / concepts/ /
+// sources/ / synthesis/ / raw/documents/ / raw/assets/ / skills/).
+function classifyFileKind(file) {
+  if (!file) return 'doc';
+  const f = file.toLowerCase();
+  const base = f.split('/').pop() || f;
+  if (base === 'index.md' || base === 'index') return 'index';
+  if (base === 'log.md' || base === 'log') return 'log';
+  if (base === 'skills.md') return 'hub';
+  if (base === 'identity.md') return 'hub';
+  if (f.startsWith('skills/'))     return 'skill';
+  if (f.startsWith('entities/'))   return 'entity';
+  if (f.startsWith('concepts/'))   return 'concept';
+  if (f.startsWith('sources/'))    return 'source';
+  if (f.startsWith('synthesis/'))  return 'synthesis';
+  if (f.startsWith('raw/assets/')) return 'asset';
+  if (f.startsWith('raw/'))        return 'doc';
+  // Anything else: treat as a hub (a top-level file linking out to others).
+  if (!f.includes('/')) return 'hub';
+  return 'doc';
+}
+
+// Render-friendly radius per kind, in the SVG coord system used by MemoryGraph.
+function radiusForKind(kind, expandedView) {
+  const scale = expandedView ? 1 : 0.85;
+  const r = ({ index: 4.5, hub: 3.4, entity: 3.4 })[kind] || 2.4;
+  return r * scale;
+}
+
+// Compute effective node colors with graph-traversal inheritance:
+//   1. Manually-colored files keep their color (no traversal needed).
+//   2. Other files BFS backwards through incoming wikilinks; if any ancestor
+//      has a manual color, the file inherits the closest one (BFS depth wins).
+//   3. Files with no manually-colored ancestor fall back to the agent's color.
+// Returns a Map<file, color>.
+function computeEffectiveColors(files, vaultEdges, manualColors, agentColor) {
+  const result = new Map();
+  // index incoming edges: child -> [parents...]
+  const incoming = new Map();
+  for (const [from, to] of vaultEdges) {
+    if (!incoming.has(to)) incoming.set(to, []);
+    incoming.get(to).push(from);
+  }
+  for (const f of files) {
+    if (manualColors[f]) { result.set(f, manualColors[f]); continue; }
+    // BFS up
+    const seen = new Set([f]);
+    const queue = [...(incoming.get(f) || [])];
+    let found = null;
+    while (queue.length) {
+      const cur = queue.shift();
+      if (seen.has(cur)) continue;
+      seen.add(cur);
+      if (manualColors[cur]) { found = manualColors[cur]; break; }
+      const parents = incoming.get(cur) || [];
+      for (const p of parents) if (!seen.has(p)) queue.push(p);
+    }
+    result.set(f, found || agentColor);
+  }
+  return result;
+}
+
 function MemoryGraph({ agent, onOpenFile, nodeColors, expandedView, onBackgroundClick, onNodeContextMenu }) {
   const files = agent.vaultFiles || [];
   const colorOverrides = nodeColors || {};
@@ -664,6 +728,12 @@ function MemoryGraph({ agent, onOpenFile, nodeColors, expandedView, onBackground
 
   const sim = simRef.current;
   const accent = agent.color || 'rgba(127,182,217,0.65)';
+  // Inherited color per file — manually-set takes precedence; otherwise BFS
+  // upstream through wikilinks to the nearest manually-colored ancestor.
+  const effectiveColors = React.useMemo(
+    () => computeEffectiveColors(files, vaultEdges, colorOverrides, accent),
+    [files.join('|'), vaultEdges.map(e => e[0] + '>' + e[1]).join('|'), JSON.stringify(colorOverrides), accent]
+  );
 
   return (
     <div className="memory-graph" style={{
@@ -702,11 +772,14 @@ function MemoryGraph({ agent, onOpenFile, nodeColors, expandedView, onBackground
           if (!p) return null;
           const isHover = hoverId === n.id;
           const isDragging = dragState && dragState.id === n.id;
-          const nodeColor = colorOverrides[n.file] || accent;
-          const baseR = expandedView ? 2.4 : 2;
-          const hoverR = expandedView ? 3.0 : 2.6;
+          const nodeColor = effectiveColors.get(n.file) || colorOverrides[n.file] || accent;
+          // Radius varies by file kind — index biggest, hub/entity medium,
+          // everything else small. Hover bumps the node up by a fixed delta.
+          const kind = classifyFileKind(n.file);
+          const baseR = radiusForKind(kind, expandedView);
+          const hoverR = baseR + (expandedView ? 0.6 : 0.5);
           const labelSize = expandedView ? 2.2 : 2.6;
-          const labelY = expandedView ? (baseR + labelSize + 0.6) : 5;
+          const labelY = expandedView ? (baseR + labelSize + 0.6) : (baseR + 3);
           return (
             <g key={n.id} transform={`translate(${p.x}, ${p.y})`}
                style={{ cursor: isDragging ? 'grabbing' : 'pointer' }}
@@ -714,11 +787,11 @@ function MemoryGraph({ agent, onOpenFile, nodeColors, expandedView, onBackground
                onMouseEnter={() => setHoverId(n.id)}
                onMouseLeave={() => setHoverId(prev => (prev === n.id ? null : prev))}
                onContextMenu={(e) => {
-                 if (onNodeContextMenu) {
-                   e.preventDefault();
-                   e.stopPropagation();
-                   onNodeContextMenu(n.file, e.clientX, e.clientY);
-                 }
+                 // Always preventDefault — even when no handler is wired,
+                 // the browser's native menu over a graph node is wrong.
+                 e.preventDefault();
+                 e.stopPropagation();
+                 if (onNodeContextMenu) onNodeContextMenu(n.file, e.clientX, e.clientY);
                }}
             >
               <circle r={isHover ? hoverR : baseR} fill={nodeColor} stroke="#fff" strokeWidth={isHover ? 0.5 : 0.2} />
@@ -735,7 +808,7 @@ function MemoryGraph({ agent, onOpenFile, nodeColors, expandedView, onBackground
         })}
        </g>
       </svg>
-      {(pan.x !== 0 || pan.y !== 0 || zoom !== 1) && (
+      {(Math.abs(pan.x) > 0.001 || Math.abs(pan.y) > 0.001 || Math.abs(zoom - 1) > 0.001) && (
         <button
           onClick={(e) => { e.stopPropagation(); resetView(); }}
           style={{
@@ -746,7 +819,7 @@ function MemoryGraph({ agent, onOpenFile, nodeColors, expandedView, onBackground
             letterSpacing: '0.06em',
           }}
           title="recenter + reset zoom"
-        >⌖ {zoom !== 1 ? `${zoom.toFixed(1)}×` : 'center'}</button>
+        >⌖ {Math.abs(zoom - 1) > 0.001 ? `${zoom.toFixed(1)}×` : 'center'}</button>
       )}
       <div style={{
         position: 'absolute', left: 8, bottom: 6,
@@ -979,6 +1052,84 @@ function SkillsSection({ agent, onInstallSkill, onUninstallSkill }) {
   );
 }
 
+// Shared chrome row at the top of every right-sidebar panel. Renders a breadcrumb
+// trail like `AGENTS › Mercury › PROFILE` so the user always knows what surface
+// they're looking at and how to back out. Per the May 2026 redesign brief — the
+// three panels (AgentConfig / ProfileEditor / MemoryGraphFilesPanel) all wear
+// this same crumb row to feel like one shell at different depths.
+function CrumbRow({ crumbs, escHint }) {
+  return (
+    <div style={{
+      height: 26, flexShrink: 0,
+      borderBottom: '1px solid var(--sb-line-soft)',
+      background: 'rgba(0,0,0,0.4)',
+      padding: '0 16px',
+      display: 'flex', alignItems: 'center',
+      fontFamily: 'var(--sb-font-mono)', fontSize: 10, letterSpacing: '0.06em',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap', flex: 1 }}>
+        {crumbs.map((c, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && <span style={{ color: 'var(--sb-fg-disabled)' }}>›</span>}
+            <span style={{
+              color: i === crumbs.length - 1 ? 'var(--sb-fg-muted)' : 'var(--sb-fg-faint)',
+              textTransform: 'uppercase',
+              overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{c}</span>
+          </React.Fragment>
+        ))}
+      </div>
+      {escHint && (
+        <span style={{ color: 'var(--sb-fg-disabled)', flexShrink: 0, marginLeft: 8 }}>{escHint}</span>
+      )}
+    </div>
+  );
+}
+
+// Shared panel header: 40×40 colored glyph block on the left, display-font
+// title + faint mono subtitle on the right. Per the May 2026 redesign spec —
+// every right-sidebar panel uses this shape so navigating between them feels
+// like one shell at different depths.
+function PanelHeader({ glyph, glyphMono, accent, title, subtitle, action }) {
+  const a = accent || 'var(--sb-fg-muted)';
+  return (
+    <div style={{
+      padding: '14px 16px 12px',
+      borderBottom: '1px solid var(--sb-line-soft)',
+      display: 'flex', alignItems: 'center', gap: 12,
+    }}>
+      <div style={{
+        width: 40, height: 40, borderRadius: 4, flexShrink: 0,
+        background: `color-mix(in srgb, ${a} 14%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${a} 38%, transparent)`,
+        color: a,
+        fontFamily: glyphMono ? 'var(--sb-font-mono)' : 'var(--sb-font-display)',
+        fontWeight: glyphMono ? 600 : 500,
+        fontSize: glyphMono ? 12 : 22,
+        letterSpacing: glyphMono ? '0.04em' : '-0.01em',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        textTransform: glyphMono ? 'uppercase' : undefined,
+      }}>{glyph}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: 'var(--sb-font-display)', fontSize: 18,
+          letterSpacing: '-0.01em', color: 'var(--sb-fg)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{title}</div>
+        {subtitle && (
+          <div style={{
+            fontFamily: 'var(--sb-font-mono)', fontSize: 11.5,
+            color: 'var(--sb-fg-faint)', letterSpacing: '0.04em',
+            marginTop: 2,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>{subtitle}</div>
+        )}
+      </div>
+      {action}
+    </div>
+  );
+}
+
 function AgentConfig({ agent, onChange, onOpenFile, onOpenMemoryGraph, nodeColors = {}, connections = [], openWizard, onInstallSkill, onUninstallSkill }) {
   const [profileMode, setProfileMode] = React.useState(false);
   const [photo, setPhoto] = React.useState(() => loadAgentPhoto(agent && agent.id));
@@ -1002,7 +1153,6 @@ function AgentConfig({ agent, onChange, onOpenFile, onOpenMemoryGraph, nodeColor
     setDraftHex(agent.color || '');
     // intentionally only on agent.id change — we don't want a daemon broadcast
     // mid-edit to overwrite what the user is typing
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent && agent.id]);
 
   if (!agent) {
@@ -1033,22 +1183,30 @@ function AgentConfig({ agent, onChange, onOpenFile, onOpenMemoryGraph, nodeColor
   };
   if (profileMode) {
     return (
-      <ProfileEditor
-        agent={agent}
-        photo={photo}
-        onPhotoChange={(dataUrl) => { saveAgentPhoto(agent.id, dataUrl); setPhoto(dataUrl); }}
-        onChange={onChange}
-        onBack={() => setProfileMode(false)}
-      />
+      <div key="profile" style={{
+        animation: 'panel-fade 120ms ease',
+        display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%',
+      }}>
+        <ProfileEditor
+          agent={agent}
+          photo={photo}
+          onPhotoChange={(dataUrl) => { saveAgentPhoto(agent.id, dataUrl); setPhoto(dataUrl); }}
+          onChange={onChange}
+          onBack={() => setProfileMode(false)}
+        />
+      </div>
     );
   }
 
   return (
     <>
-      <div className="panel-head">
-        <h3>/// AGENT</h3>
-        <span className="marker">{agent.id}</span>
-      </div>
+      <CrumbRow crumbs={['agents', agent.name || 'unnamed']} />
+      <PanelHeader
+        glyph={agent.glyph || agent.name?.[0] || '?'}
+        accent={agent.color}
+        title={agent.name}
+        subtitle={`agent · ${agent.id.slice(0, 8)}`}
+      />
       <div className="panel-body">
         <div className="panel-body-scroll">
 
@@ -1168,29 +1326,20 @@ function AgentConfig({ agent, onChange, onOpenFile, onOpenMemoryGraph, nodeColor
           <label>working directory</label>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input readOnly value={`~/.hexagent/agents/${agent.id}/vault/`} style={{ flex: 1 }} />
+            {/* Disabled until M-Workdir lands — daemon currently always runs
+                agents in their vault dir regardless of this field. */}
             <button
-              onClick={() => {
-                // Spawn a one-shot directory picker. Browsers don't expose the
-                // absolute path, so this currently captures the chosen folder
-                // name — wiring custom workdirs into the daemon is M-Workdir.
-                const inp = document.createElement('input');
-                inp.type = 'file'; inp.webkitdirectory = true;
-                inp.onchange = (e) => {
-                  const f = e.target.files && e.target.files[0];
-                  if (f) {
-                    const folder = (f.webkitRelativePath || f.name).split('/')[0];
-                    // eslint-disable-next-line no-alert
-                    alert('selected folder: ' + folder + '\n\n(custom workdirs are not wired to the daemon yet — agents still run in their vault)');
-                  }
-                };
-                inp.click();
-              }}
+              disabled
+              title="custom workdirs not wired yet — agents always run in their vault (M-Workdir milestone)"
               style={{
                 padding: '6px 10px', fontFamily: 'var(--sb-font-mono)', fontSize: 11,
-                background: 'transparent', border: '1px solid var(--sb-line)', borderRadius: 4,
-                color: 'var(--sb-fg-muted)', cursor: 'pointer', letterSpacing: '0.04em',
+                background: 'transparent', border: '1px solid var(--sb-line-soft)', borderRadius: 4,
+                color: 'var(--sb-fg-disabled)', cursor: 'not-allowed', letterSpacing: '0.04em',
               }}
             >change</button>
+          </div>
+          <div className="marker" style={{ marginTop: 4, color: 'var(--sb-fg-disabled)' }}>
+            daemon-fixed · agents always run in their vault
           </div>
         </div>
 
@@ -1239,6 +1388,13 @@ function ProfileEditor({ agent, photo, onPhotoChange, onChange, onBack }) {
   React.useEffect(() => { setDraftGlyph(agent.glyph || ''); }, [agent.id]);
   const fileInputRef = React.useRef(null);
 
+  // Esc closes the profile editor (matches the "esc" hint in the crumb row).
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onBack && onBack(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onBack]);
+
   const commitGlyph = () => {
     if (draftGlyph !== agent.glyph && draftGlyph.length > 0) onChange({ ...agent, glyph: draftGlyph });
   };
@@ -1278,19 +1434,24 @@ function ProfileEditor({ agent, photo, onPhotoChange, onChange, onBack }) {
 
   return (
     <>
-      <div className="panel-head" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button
-          onClick={onBack}
-          style={{
-            background: 'transparent', border: '1px solid var(--sb-line)', borderRadius: 3,
-            color: 'var(--sb-fg-muted)', fontFamily: 'var(--sb-font-mono)', fontSize: 10,
-            padding: '3px 8px', cursor: 'pointer', letterSpacing: '0.06em',
-          }}
-        >← back</button>
-        <h3 style={{ margin: 0 }}>/// PROFILE</h3>
-        <span style={{ flex: 1 }} />
-        <span className="marker">{agent.name}</span>
-      </div>
+      <CrumbRow crumbs={['agents', agent.name || 'unnamed', 'profile']} escHint="esc" />
+      <PanelHeader
+        glyph={agent.glyph || agent.name?.[0] || '?'}
+        accent="var(--sb-accent)"
+        title="edit profile"
+        subtitle={agent.name}
+        action={
+          <button
+            onClick={onBack}
+            style={{
+              background: 'transparent', border: '1px solid var(--sb-line)', borderRadius: 3,
+              color: 'var(--sb-fg-muted)', fontFamily: 'var(--sb-font-mono)', fontSize: 10,
+              padding: '4px 10px', cursor: 'pointer', letterSpacing: '0.06em', flexShrink: 0,
+            }}
+            title="back to agent config (esc)"
+          >← back</button>
+        }
+      />
       <div className="panel-body">
         <div className="panel-body-scroll">
           {/* Big preview */}
@@ -1409,21 +1570,17 @@ function MemoryGraphFilesPanel({ agent, nodeColors = {}, setNodeColor, onOpenFil
   const [search, setSearch] = React.useState('');
   React.useEffect(() => { setOpenFile(null); setSearch(''); }, [agent && agent.id]);
 
-  if (!agent) {
-    return (
-      <div className="empty-state">
-        <div className="marker-x">/// NO AGENT</div>
-        <div className="ttl">focus an agent to inspect its memory graph</div>
-      </div>
-    );
-  }
-
-  const colors = nodeColors[agent.id] || {};
-  const allFiles = (agent.vaultFiles && agent.vaultFiles.length > 0)
+  // All hooks must run on every render — even when there's no agent. Computing
+  // these unconditionally (and falling back to safe defaults) keeps the hook
+  // count stable across null↔value transitions of the focused agent. Earlier
+  // versions had an early return above the useMemo calls and crashed React with
+  // "Rendered more hooks than during the previous render."
+  const colors = (agent && nodeColors[agent.id]) || {};
+  const allFiles = (agent && agent.vaultFiles && agent.vaultFiles.length > 0)
     ? [...agent.vaultFiles].sort()
     : ['index.md'];
-  const accent = agent.color || '#7fb6d9';
-  const vaultEdges = agent.vaultEdges || [];
+  const accent = (agent && agent.color) || '#7fb6d9';
+  const vaultEdges = (agent && agent.vaultEdges) || [];
 
   const { outgoing, incoming } = React.useMemo(() => {
     const out = {}; const inc = {};
@@ -1440,12 +1597,32 @@ function MemoryGraphFilesPanel({ agent, nodeColors = {}, setNodeColor, onOpenFil
     return allFiles.filter(f => f.toLowerCase().includes(q));
   }, [allFiles, search]);
 
+  // Inherited colors so the file row's small swatch reflects the same color
+  // the node has in the graph (manually-colored ancestor cascades down).
+  const effectiveColors = React.useMemo(
+    () => computeEffectiveColors(allFiles, vaultEdges, colors, accent),
+    [allFiles.join('|'), vaultEdges.map(e => e[0] + '>' + e[1]).join('|'), JSON.stringify(colors), accent]
+  );
+
+  if (!agent) {
+    return (
+      <div className="empty-state">
+        <div className="marker-x">/// NO AGENT</div>
+        <div className="ttl">focus an agent to inspect its memory graph</div>
+      </div>
+    );
+  }
+
   return (
     <>
-      <div className="panel-head">
-        <h3>/// FILES</h3>
-        <span className="marker">{allFiles.length}{search ? ` · ${files.length} match` : ''}</span>
-      </div>
+      <CrumbRow crumbs={['memory', agent.name || 'unnamed', 'files']} />
+      <PanelHeader
+        glyph="md"
+        glyphMono
+        accent="var(--sb-kind-file)"
+        title={`${agent.name}'s vault`}
+        subtitle={`${allFiles.length} ${allFiles.length === 1 ? 'file' : 'files'}${search ? ` · ${files.length} match` : ''}`}
+      />
       <div className="panel-body">
         <SearchBar value={search} onChange={setSearch} placeholder="search files…" />
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
@@ -1455,11 +1632,15 @@ function MemoryGraphFilesPanel({ agent, nodeColors = {}, setNodeColor, onOpenFil
             color: 'var(--sb-fg-disabled)', letterSpacing: '0.04em',
             borderBottom: '1px solid var(--sb-line-soft)',
           }}>
-            {agent.name}'s vault · click a row to open · ⋯ for properties
+            {agent.name}'s vault · click a row for properties + open
           </div>
           {files.map(f => {
             const cur = colors[f] || '';
-            const swatch = cur || accent;
+            // Effective swatch: manual color OR inherited from upstream
+            // wikilink ancestor OR agent default. Lets a "concepts" parent
+            // node colored once paint all its descendants at render time.
+            const inherited = effectiveColors.get(f);
+            const swatch = cur || inherited || accent;
             const isOpen = openFile === f;
             return (
               <FileRow
@@ -1506,15 +1687,18 @@ function FileRow({
 
   return (
     <div style={{ borderBottom: '1px solid var(--sb-line-soft)' }}>
-      {/* Row */}
+      {/* Row — clicking ANYWHERE on the row opens the properties pane (the
+          three-dots glyph is a visual affordance only; row + glyph both fire
+          the same handler). The explicit "open file" action lives at the top
+          of the expanded pane below. */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '8px 14px',
         cursor: 'pointer',
         background: isOpen ? 'var(--sb-surface)' : 'transparent',
       }}
-        onClick={onOpenFile}
-        title={`open ${file}`}
+        onClick={onOpenProps}
+        title={isOpen ? 'close properties' : `properties for ${file}`}
       >
         <span style={{
           width: 10, height: 10, borderRadius: 99, flexShrink: 0,
@@ -1526,16 +1710,14 @@ function FileRow({
           color: 'var(--sb-fg)', letterSpacing: '0.02em',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>{file.replace(/\.md$/, '')}</span>
-        <button
-          onClick={(e) => { e.stopPropagation(); onOpenProps(); }}
-          title="properties"
+        <span
+          aria-hidden="true"
           style={{
-            background: 'transparent', border: 'none',
             color: isOpen ? 'var(--sb-fg)' : 'var(--sb-fg-faint)',
             fontFamily: 'var(--sb-font-mono)', fontSize: 14, lineHeight: '12px',
-            padding: '0 6px', cursor: 'pointer', letterSpacing: '0.05em',
+            padding: '0 4px', letterSpacing: '0.05em',
           }}
-        >⋯</button>
+        >{isOpen ? '⌃' : '⋯'}</span>
       </div>
 
       {/* Properties pane */}
@@ -1544,6 +1726,23 @@ function FileRow({
           onClick={(e) => e.stopPropagation()}
           style={{ padding: '4px 14px 14px', background: 'var(--sb-surface)' }}
         >
+          {/* open-file action at the top — replaces the row's previous click
+              behavior so the path to opening the file is still one click from
+              this expanded view. */}
+          <button
+            onClick={onOpenFile}
+            style={{
+              width: '100%', marginTop: 4, marginBottom: 12,
+              padding: '7px 10px', borderRadius: 4,
+              background: 'transparent', border: '1px solid var(--sb-line)',
+              color: 'var(--sb-fg)',
+              fontFamily: 'var(--sb-font-mono)', fontSize: 11, letterSpacing: '0.06em',
+              cursor: 'pointer', textTransform: 'lowercase',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--sb-bg-elev)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >open file</button>
+
           {/* filename */}
           <div className="field" style={{ marginBottom: 10 }}>
             <label>filename</label>
@@ -1573,25 +1772,45 @@ function FileRow({
             )}
           </div>
 
-          {/* color */}
+          {/* color — swatch picker (12 curated colors) + custom color input as fallback */}
           <div className="field" style={{ marginBottom: 10 }}>
             <label>color</label>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+              {['#7fb6d9','#a89be0','#9bd1a4','#e6c068','#e89c7f','#88c4ce','#d9a3c9','#c8c8b8','#7fa8a8','#d4b896','#d93b25','#737373'].map(c => {
+                const isCur = hasCustomColor && swatch.toLowerCase() === c.toLowerCase();
+                return (
+                  <button
+                    key={c}
+                    onClick={() => onSetColor(c)}
+                    style={{
+                      width: 20, height: 20, borderRadius: '50%', padding: 0,
+                      background: c,
+                      border: isCur ? '2px solid #fff' : '1px solid rgba(255,255,255,0.15)',
+                      cursor: 'pointer',
+                    }}
+                    title={c}
+                  />
+                );
+              })}
               <input
                 type="color"
                 value={swatch}
                 onChange={(e) => onSetColor(e.target.value)}
                 style={{
-                  width: 36, height: 26, padding: 0, border: '1px solid var(--sb-line)',
+                  width: 28, height: 22, padding: 0, border: '1px solid var(--sb-line)',
                   borderRadius: 4, background: 'transparent', cursor: 'pointer',
                 }}
+                title="custom color"
               />
-              <span style={{ flex: 1, fontFamily: 'var(--sb-font-mono)', fontSize: 10.5, color: 'var(--sb-fg-muted)' }}>
-                {hasCustomColor ? 'custom' : 'agent default'}
-              </span>
               {hasCustomColor && (
                 <button onClick={onResetColor} style={rowBtn}>reset</button>
               )}
+            </div>
+            <div style={{
+              marginTop: 4, fontFamily: 'var(--sb-font-mono)', fontSize: 10,
+              color: 'var(--sb-fg-disabled)',
+            }}>
+              {hasCustomColor ? 'custom' : 'agent default'}
             </div>
           </div>
 
@@ -1621,11 +1840,9 @@ function FileRow({
                 </div>}
           </div>
 
-          {/* actions */}
+          {/* destructive action */}
           {!isImmutable && (
-            <div style={{ display: 'flex', gap: 6, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--sb-line)' }}>
-              <button onClick={onOpenFile} style={rowBtn}>open</button>
-              <span style={{ flex: 1 }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--sb-line)' }}>
               <button onClick={onDelete} style={{ ...rowBtn, color: '#d93b25', borderColor: 'rgba(217,59,37,0.4)' }}>delete</button>
             </div>
           )}
@@ -1660,7 +1877,30 @@ function LinkChip({ label, onClick, onOpen }) {
 
 // ---------- LEFT: agent list (used both as default view and while a graph tab is active) ----------
 
-function AgentsList({ agents, selectedId, onPick, modeBadge }) {
+// Working-state pip rendered next to an agent's name. Color + animation per
+// state, per the May 2026 redesign spec. Returns null when state is idle/unknown
+// so we don't dot up rows that have nothing happening.
+function WorkingPip({ state }) {
+  const cfg = ({
+    'thinking':        { color: 'var(--sb-work-thinking)',       anim: null,                            glow: 'rgba(127,182,217,0.5)' },
+    'tool-running':    { color: 'var(--sb-work-tool)',           anim: 'workPulse 1.4s infinite',       glow: 'rgba(230,192,104,0.5)' },
+    'awaiting-input':  { color: 'var(--sb-work-awaiting-input)', anim: 'workBlink 0.9s infinite',       glow: 'rgba(217,59,37,0.8)'   },
+    'moving':          { color: 'var(--sb-work-moving)',         anim: null,                            glow: 'rgba(168,155,224,0.5)' },
+  })[state];
+  if (!cfg) return null;
+  return (
+    <span title={state} style={{
+      display: 'inline-block',
+      width: 6, height: 6, borderRadius: '50%',
+      background: cfg.color,
+      boxShadow: `0 0 ${state === 'awaiting-input' ? 6 : 4}px ${cfg.glow}`,
+      animation: cfg.anim || 'none',
+      flexShrink: 0,
+    }} />
+  );
+}
+
+function AgentsList({ agents, selectedId, onPick, onOpen, modeBadge, onSpawnNew }) {
   // Loaded photos per agent — read once + whenever the agent set changes.
   const [photos, setPhotos] = React.useState(() => {
     const m = {};
@@ -1680,6 +1920,76 @@ function AgentsList({ agents, selectedId, onPick, modeBadge }) {
     return agents.filter(a => a.name.toLowerCase().includes(q));
   }, [agents, search]);
 
+  // Bucket the filtered agents into WORKING / IDLE / DRAFT for section grouping.
+  // "Working" = anything live with a non-idle state (thinking / tool-running /
+  // awaiting-input / moving). Drafts always group last regardless of state.
+  const groups = React.useMemo(() => {
+    const working = [];
+    const idle = [];
+    const draft = [];
+    for (const a of filtered) {
+      if (a.status === 'Draft') { draft.push(a); continue; }
+      if (a.state && a.state !== 'idle' && a.state !== 'paused') working.push(a);
+      else idle.push(a);
+    }
+    return { working, idle, draft };
+  }, [filtered]);
+
+  const renderRow = (a) => {
+    const isActive = a.id === selectedId;
+    const photo = photos[a.id];
+    const fileCount = (a.vaultFiles || []).length;
+    const edgeCount = (a.vaultEdges || []).length;
+    return (
+      <div key={a.id}
+           className={`conv-row ${isActive ? 'focused' : ''}`}
+           tabIndex={0}
+           onClick={() => onPick && onPick(a.id)}
+           onDoubleClick={() => (onOpen || onPick) && (onOpen || onPick)(a.id)}
+           onKeyDown={(e) => {
+             if (e.key === 'Enter') {
+               e.preventDefault();
+               (onOpen || onPick) && (onOpen || onPick)(a.id);
+             }
+           }}
+           title={onOpen ? `${a.name} — click to focus, double-click or Enter to open chat` : a.name}>
+        <div className="avatar" style={{
+          background: photo ? 'transparent' : a.color,
+          padding: 0, overflow: 'hidden',
+        }}>
+          {photo
+            ? <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            : a.glyph}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div className="conv-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+            <WorkingPip state={a.state} />
+            {isActive && modeBadge && <span style={{
+              fontFamily: 'var(--sb-font-mono)', fontSize: 9,
+              color: 'var(--sb-accent)', letterSpacing: '0.08em',
+            }}>{modeBadge}</span>}
+          </div>
+          <div className="conv-preview">
+            {fileCount} {fileCount === 1 ? 'file' : 'files'} · {edgeCount} {edgeCount === 1 ? 'link' : 'links'} · {a.status === 'Live' ? 'live' : 'draft'}
+          </div>
+        </div>
+        <div className="conv-meta">
+          <span className="conv-time" style={{ fontFamily: 'var(--sb-font-mono)', fontSize: 9 }}>
+            q={a.q} r={a.r}
+          </span>
+          {a.status === 'Live'
+            ? <span className="status-dot live" />
+            : <span className="status-dot archived" />}
+        </div>
+      </div>
+    );
+  };
+
+  // "Quiet world" empty-state card surfaces when ≤3 agents in total — nudges the
+  // user to spawn another. Specifically called out in the redesign brief.
+  const showQuietWorld = !search && agents.length > 0 && agents.length <= 3;
+
   return (
     <>
       <SearchBar value={search} onChange={setSearch} placeholder="search agents…" />
@@ -1690,49 +2000,67 @@ function AgentsList({ agents, selectedId, onPick, modeBadge }) {
             {agents.length === 0 ? 'no agents on the grid yet.' : 'no agents match this filter.'}
           </div>
         )}
-        {filtered.map(a => {
-          const isActive = a.id === selectedId;
-          const photo = photos[a.id];
-          const fileCount = (a.vaultFiles || []).length;
-          const edgeCount = (a.vaultEdges || []).length;
-          return (
-            <div key={a.id}
-                 className={`conv-row ${isActive ? 'focused' : ''}`}
-                 onClick={() => onPick(a.id)}
-                 title={a.name}>
-              <div className="avatar" style={{
-                background: photo ? 'transparent' : a.color,
-                padding: 0, overflow: 'hidden',
-              }}>
-                {photo
-                  ? <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                  : a.glyph}
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div className="conv-name">
-                  {a.name}
-                  {isActive && modeBadge && <span style={{
-                    marginLeft: 6, fontFamily: 'var(--sb-font-mono)', fontSize: 9,
-                    color: 'var(--sb-accent)', letterSpacing: '0.08em',
-                  }}>{modeBadge}</span>}
-                </div>
-                <div className="conv-preview">
-                  {fileCount} {fileCount === 1 ? 'file' : 'files'} · {edgeCount} {edgeCount === 1 ? 'link' : 'links'} · {a.status === 'Live' ? 'live' : 'draft'}
-                </div>
-              </div>
-              <div className="conv-meta">
-                <span className="conv-time" style={{ fontFamily: 'var(--sb-font-mono)', fontSize: 9 }}>
-                  q={a.q} r={a.r}
-                </span>
-                {a.status === 'Live'
-                  ? <span className="status-dot live" />
-                  : <span className="status-dot archived" />}
-              </div>
+
+        {groups.working.length > 0 && (
+          <SectionHeader label="WORKING" count={groups.working.length} />
+        )}
+        {groups.working.map(renderRow)}
+
+        {groups.idle.length > 0 && (
+          <SectionHeader label="IDLE" count={groups.idle.length} />
+        )}
+        {groups.idle.map(renderRow)}
+
+        {groups.draft.length > 0 && (
+          <SectionHeader label="DRAFT" count={groups.draft.length} />
+        )}
+        {groups.draft.map(renderRow)}
+
+        {showQuietWorld && (
+          <div style={{
+            margin: '14px 12px',
+            padding: '14px 14px 12px',
+            border: '1px dashed var(--sb-line)',
+            borderRadius: 4,
+            background: 'rgba(255,255,255,0.01)',
+          }}>
+            <div style={{ fontFamily: 'var(--sb-font-display)', fontSize: 14, color: 'var(--sb-fg)', letterSpacing: '-0.01em', marginBottom: 4 }}>
+              quiet world.
             </div>
-          );
-        })}
+            <div style={{ fontFamily: 'var(--sb-font-body)', fontSize: 11.5, color: 'var(--sb-fg-faint)', lineHeight: 1.45, marginBottom: 10 }}>
+              {agents.length === 1 ? 'one agent — pick an empty cell on the grid to seed another.'
+                : agents.length === 2 ? 'two agents — pick an empty cell on the grid to seed a third.'
+                : 'three agents — pick an empty cell on the grid to seed a fourth.'}
+            </div>
+            <button style={{
+              fontFamily: 'var(--sb-font-mono)', fontSize: 10.5, letterSpacing: '0.06em',
+              padding: '5px 12px', borderRadius: 3,
+              background: 'transparent', border: '1px solid var(--sb-accent)',
+              color: 'var(--sb-accent)', cursor: 'pointer', textTransform: 'lowercase',
+            }}
+              onClick={(e) => { e.stopPropagation(); onSpawnNew && onSpawnNew(); }}
+              title="switch the grid into Spawn mode — then click an empty hex to drop a new agent"
+            >+ new agent</button>
+          </div>
+        )}
       </div>
     </>
+  );
+}
+
+// Sticky-ish section divider between agent groups in the AgentsList.
+function SectionHeader({ label, count }) {
+  return (
+    <div style={{
+      padding: '10px 14px 6px',
+      fontFamily: 'var(--sb-font-mono)', fontSize: 10,
+      color: 'var(--sb-fg-faint)', letterSpacing: '0.08em',
+      borderBottom: '1px solid var(--sb-line-soft)',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    }}>
+      <span>/// {label}</span>
+      <span style={{ color: 'var(--sb-fg-disabled)' }}>· {count}</span>
+    </div>
   );
 }
 
@@ -1766,4 +2094,3 @@ window.ChatView = ChatView;
 window.AgentConfig = AgentConfig;
 window.MemoryGraphTab = MemoryGraphTab;
 window.MemoryGraphFilesPanel = MemoryGraphFilesPanel;
-window.GraphAgentList = GraphAgentList;

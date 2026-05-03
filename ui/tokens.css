@@ -84,6 +84,45 @@
   --sb-dur-fast:    200ms;
   --sb-dur-base:    300ms;
   --sb-dur-slow:    500ms;
+
+  /* =============================================================
+     REDESIGN 2026-05 — additive tokens from Claude Design handoff.
+     Existing tokens kept intact; surface/line revisions skipped
+     (our baseline is already heavier than the designer's reference).
+     ============================================================= */
+
+  /* Tab kinds — accent color per middle-panel tab kind. */
+  --sb-kind-grid:     #d93b25;   /* alias to --sb-accent */
+  --sb-kind-file:     #7fb6d9;
+  --sb-kind-memory:   #a89be0;
+  --sb-kind-preview:  #9bd1a4;
+  --sb-kind-settings: #737373;
+
+  /* Agent working state — pip color + glow source. */
+  --sb-work-thinking:        #7fb6d9;
+  --sb-work-tool:            #e6c068;
+  --sb-work-awaiting-input:  #d93b25;
+  --sb-work-moving:          #a89be0;
+
+  /* Memory graph node fills (defaults; per-node overrides win). */
+  --sb-graph-index:     #e6c068;
+  --sb-graph-log:       #9bd1a4;
+  --sb-graph-hub:       #7fb6d9;
+  --sb-graph-entity:    #a89be0;
+  --sb-graph-concept:   #e89c7f;
+  --sb-graph-source:    #88c4ce;
+  --sb-graph-synthesis: #d9a3c9;
+  --sb-graph-doc:       #c8c8b8;
+  --sb-graph-asset:     #7fa8a8;
+  --sb-graph-skill:     #d4b896;
+
+  /* Save pill state colors. */
+  --sb-pill-saved:    #9bd1a4;
+  --sb-pill-saving:   #e6c068;
+  --sb-pill-conflict: #d93b25;
+
+  /* Explicit semantic alias for hover surface. */
+  --sb-surface-hover: var(--sb-surface-2);
 }
 
 /* =============================================================

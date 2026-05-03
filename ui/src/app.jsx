@@ -4,19 +4,26 @@ const { useState: useStateA, useEffect: useEffectA, useRef: useRefA } = React;
 
 // Squadron daemon WebSocket URL.
 // Defaults to ws://localhost:7878/ws. Override with ?daemon=ws://host/ws on the page URL.
-// If the page URL also has ?token=…, we forward it to the WS URL as a query
-// param so the daemon's whitelist gate can validate the connection.
+// If the page URL also has ?token=…, we forward it to BOTH the WS URL and any
+// /vault/<id>/<path> static-server fetches so the gates on each can validate.
+const PAGE_TOKEN = (() => {
+  try { return new URLSearchParams(window.location.search).get('token'); }
+  catch { return null; }
+})();
 const DAEMON_URL = (() => {
   try {
     const params = new URLSearchParams(window.location.search);
     const base = params.get('daemon') || 'ws://localhost:7878/ws';
-    const token = params.get('token');
-    if (!token) return base;
+    if (!PAGE_TOKEN) return base;
     const sep = base.includes('?') ? '&' : '?';
-    return base + sep + 'token=' + encodeURIComponent(token);
+    return base + sep + 'token=' + encodeURIComponent(PAGE_TOKEN);
   } catch { return 'ws://localhost:7878/ws'; }
 })();
-// eslint-disable-next-line no-console
+// Build a vault URL that honors the token gate on the static server.
+function vaultUrl(agentId, path) {
+  const base = `${window.location.origin}/vault/${agentId}/${path}`;
+  return PAGE_TOKEN ? `${base}?token=${encodeURIComponent(PAGE_TOKEN)}` : base;
+}
 console.log('[squadron] DAEMON_URL =', DAEMON_URL.replace(/token=[^&]+/, 'token=***'), '· page origin =', window.location.origin);
 
 // Daemon DTO → UI agent shape. The DTO uses systemPrompt; existing prototype
@@ -65,7 +72,10 @@ function DaemonPill({ status }) {
 function TopBar({ killed, onKillSwitch, openSettings, autoWalkOn, setAutoWalkOn, openWizard, connectionCount, daemonStatus }) {
   return (
     <div className="topbar">
-      <div className="brand"><span className="dot" /> squadron</div>
+      <div className="brand">
+        <img src="squadron-logo.svg" alt="" style={{ width: 16, height: 16, display: 'block', flexShrink: 0 }} />
+        <span>squadron</span>
+      </div>
       <span className="sep" />
       <span className="marker">/// world: devshop · 1 of 1</span>
       <span className="sep" />
@@ -90,7 +100,45 @@ function TopBar({ killed, onKillSwitch, openSettings, autoWalkOn, setAutoWalkOn,
   );
 }
 
-function Tabs({ tabs, activeId, onActivate, onClose, onReorder, onPin, onDuplicate, onDelete }) {
+// Per-kind glyph rendered at the leading edge of a tab. The Grid tab uses a
+// distinctive accent-tinted badge ("G"); all other kinds get a 14×14 monospace
+// glyph chip whose border + foreground color is the kind's accent when active,
+// muted when inactive. Per the May 2026 redesign brief.
+function TabGlyph({ kind, active }) {
+  if (kind === 'grid') {
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 18, height: 18, borderRadius: 3,
+        background: 'rgba(217,59,37,0.18)',
+        border: '1px solid rgba(217,59,37,0.5)',
+        color: '#fff',
+        fontFamily: 'var(--sb-font-display)', fontWeight: 600, fontSize: 11,
+        flexShrink: 0,
+      }}>G</span>
+    );
+  }
+  const map = {
+    'file':         { glyph: 'md', accent: 'var(--sb-kind-file)' },
+    'vault-preview':{ glyph: '▦',  accent: 'var(--sb-kind-preview)' },
+    'memory-graph': { glyph: '◉',  accent: 'var(--sb-kind-memory)' },
+    'settings':     { glyph: '⚙',  accent: 'var(--sb-kind-settings)' },
+  };
+  const cfg = map[kind] || map['file'];
+  const color = active ? cfg.accent : 'var(--sb-fg-muted)';
+  const border = active ? cfg.accent : 'var(--sb-line)';
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: 14, height: 14, borderRadius: 2,
+      border: `1px solid ${border}`, color,
+      fontFamily: 'var(--sb-font-mono)', fontSize: 9, lineHeight: 1,
+      flexShrink: 0,
+    }}>{cfg.glyph}</span>
+  );
+}
+
+function Tabs({ tabs, agents, activeId, onActivate, onClose, onReorder, onPin, onDuplicate, onDelete, onCloseOthers, onRename }) {
   const [dragId, setDragId] = useStateA(null);
   const [dropAt, setDropAt] = useStateA(null); // { id, side: 'before'|'after' }
   const [menu, setMenu] = useStateA(null); // { id, x, y }
@@ -106,7 +154,22 @@ function Tabs({ tabs, activeId, onActivate, onClose, onReorder, onPin, onDuplica
 
   return (
     <>
-      <div className="tabs">
+      <div
+        className="tabs"
+        // Vertical wheel input → horizontal scroll. Trackpad horizontal swipes
+        // already work natively (deltaX); this routes plain mouse-wheel and
+        // trackpad two-finger vertical scrolls into horizontal motion when the
+        // cursor is over the tab strip. Only acts when there's overflow to scroll.
+        onWheel={(e) => {
+          const el = e.currentTarget;
+          if (el.scrollWidth <= el.clientWidth) return;
+          // If the user's gesture has any horizontal component already, let the
+          // browser handle it natively. Only redirect pure-vertical wheels.
+          if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+          el.scrollLeft += e.deltaY;
+          e.preventDefault();
+        }}
+      >
         {tabs.map(t => {
           const isGrid = t.kind === 'grid';
           const cls = ['tab'];
@@ -132,6 +195,30 @@ function Tabs({ tabs, activeId, onActivate, onClose, onReorder, onPin, onDuplica
                 if (isGrid) { e.preventDefault(); return; }
                 e.dataTransfer.effectAllowed = 'move';
                 e.dataTransfer.setData('text/plain', t.id);
+                // Custom drag ghost — replaces the browser default chip with a tilted
+                // pill that has the accent-red drop shadow per the May 2026 redesign.
+                const ghost = document.createElement('div');
+                ghost.textContent = t.title || '';
+                ghost.style.cssText = [
+                  'position:absolute', 'top:-1000px', 'left:-1000px',
+                  'padding:6px 12px',
+                  'background:rgba(10,10,10,0.95)',
+                  'backdrop-filter:blur(6px)',
+                  '-webkit-backdrop-filter:blur(6px)',
+                  'border:1px solid rgba(255,255,255,0.10)',
+                  'color:#fff',
+                  'font-family:Inter,ui-sans-serif,system-ui,sans-serif',
+                  'font-size:12px',
+                  'border-radius:4px',
+                  'box-shadow:0 0 0 1px rgba(217,59,37,0.3),0 12px 32px rgba(0,0,0,0.6)',
+                  'transform:rotate(-1.5deg)',
+                  'pointer-events:none',
+                  'white-space:nowrap',
+                ].join(';');
+                document.body.appendChild(ghost);
+                e.dataTransfer.setDragImage(ghost, 20, 12);
+                // Browser captures the snapshot synchronously; remove on next tick.
+                setTimeout(() => { try { document.body.removeChild(ghost); } catch {} }, 0);
                 setDragId(t.id);
               }}
               onDragOver={(e) => {
@@ -157,13 +244,31 @@ function Tabs({ tabs, activeId, onActivate, onClose, onReorder, onPin, onDuplica
               }}
               onDragEnd={() => { setDragId(null); setDropAt(null); }}
             >
-              {!isGrid && (
-                t.kind === 'settings' ? <I.settings />
-                  : t.kind === 'memory-graph' ? <I.hex />
-                  : <I.file />
-              )}
+              <TabGlyph kind={t.kind} active={activeId === t.id} />
               {t.title}
-              {t.badge && <span className="badge">{t.badge}</span>}
+              {/* Vault badge for file/preview kinds — small chip showing which
+                  agent's vault this file belongs to so a row of tabs from
+                  multiple agents reads at a glance. Replaces the generic badge
+                  for those kinds. */}
+              {(t.kind === 'file' || t.kind === 'vault-preview') && t.agentId
+                ? (() => {
+                    const ag = agents && agents.find(a => a.id === t.agentId);
+                    const vault = (ag && ag.vault) || (ag && ag.name) || t.badge;
+                    if (!vault) return null;
+                    return (
+                      <span style={{
+                        fontFamily: 'var(--sb-font-mono)', fontSize: 9,
+                        padding: '1px 5px', borderRadius: 3,
+                        border: '1px solid var(--sb-line)',
+                        color: 'var(--sb-fg-faint)',
+                        letterSpacing: '0.05em',
+                        textTransform: 'lowercase',
+                        flexShrink: 0,
+                      }} title={`vault: ${vault}`}>{vault}</span>
+                    );
+                  })()
+                : (t.badge && <span className="badge">{t.badge}</span>)
+              }
               {!isGrid && (
                 <span className="close" onClick={(e) => { e.stopPropagation(); onClose(t.id); }}><I.close /></span>
               )}
@@ -180,7 +285,22 @@ function Tabs({ tabs, activeId, onActivate, onClose, onReorder, onPin, onDuplica
         if (t.kind === 'file' || t.kind === 'memory-graph') {
           items.push({ id: 'dup', label: 'duplicate', action: () => onDuplicate && onDuplicate(t.id) });
         }
+        if (t.kind === 'file' && onRename) {
+          items.push({ id: 'rename', label: 'rename file…', action: () => {
+            const next = window.prompt('rename file to:', t.path || t.title || '');
+            if (!next) return;
+            const trimmed = next.trim();
+            if (!trimmed || trimmed === t.path) return;
+            onRename(t.id, trimmed);
+          }});
+        }
         items.push({ id: 'close', label: 'close', action: () => onClose(t.id) });
+        // "close others" — only shown when there are at least 2 closeable tabs.
+        // Grid is always immune. Skips itself.
+        const closeable = tabs.filter(x => x.kind !== 'grid');
+        if (onCloseOthers && closeable.length >= 2) {
+          items.push({ id: 'close-others', label: 'close others', action: () => onCloseOthers(t.id) });
+        }
         if (t.kind === 'file') {
           items.push({ id: 'delete', label: 'delete file…', danger: true, action: () => onDelete && onDelete(t.id) });
         }
@@ -217,7 +337,37 @@ function Tabs({ tabs, activeId, onActivate, onClose, onReorder, onPin, onDuplica
   );
 }
 
-function MarkdownTab({ tab, vaultEntry, agentName, requestVaultFile, writeVaultFile }) {
+// Parse a string into a sequence of plain-text chunks and {wikilink} tokens.
+// Matches Obsidian-style [[Target]] and [[Target|Alias]]. Single line only —
+// `]]` not allowed to span newlines, matching Obsidian's behavior.
+function parseWikilinks(text) {
+  const re = /\[\[([^\[\]\n]+?)\]\]/g;
+  const out = [];
+  let last = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push({ wikilink: m[1] });
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+// Resolve a wikilink target ("Foo" or "Foo|alias" or "folder/Foo") to an actual
+// path in the agent's vault, or null if no such file exists. Mirrors the suffix
+// matching used by handleOpenVaultFile so styling and routing agree.
+function resolveWikilink(target, vaultFiles) {
+  if (!target || !Array.isArray(vaultFiles)) return null;
+  const cleaned = target.split('|')[0].trim();
+  if (!cleaned) return null;
+  const filename = /\.[a-z0-9]+$/i.test(cleaned) ? cleaned : cleaned + '.md';
+  if (vaultFiles.includes(filename)) return filename;
+  const suffix = filename.startsWith('/') ? filename : '/' + filename;
+  return vaultFiles.find(f => ('/' + f).endsWith(suffix)) || null;
+}
+
+function MarkdownTab({ tab, vaultEntry, agentName, vaultFiles, vaultEdges, requestVaultFile, writeVaultFile, onOpenFile }) {
   // tab = { id, kind:'file', agentId, path, title, badge }
   const { agentId, path } = tab;
 
@@ -230,6 +380,14 @@ function MarkdownTab({ tab, vaultEntry, agentName, requestVaultFile, writeVaultF
   const [savedAt, setSavedAt] = useStateA(null);
   const saveTimerRef = useRefA(null);
   const skipNextSyncRef = useRefA(false);
+  const overlayRef = useRefA(null);
+
+  const openWikilink = (target) => {
+    if (!onOpenFile) return;
+    const resolved = resolveWikilink(target, vaultFiles);
+    if (!resolved) return; // no matching file → no-op (rendered faded)
+    onOpenFile(agentId, resolved);
+  };
 
   // On first content arrival from daemon: hydrate the editor.
   useEffectA(() => {
@@ -255,7 +413,6 @@ function MarkdownTab({ tab, vaultEntry, agentName, requestVaultFile, writeVaultF
       }
     }
     skipNextSyncRef.current = false;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vaultEntry, agentId, path]);
 
   const scheduleSave = (next) => {
@@ -269,7 +426,10 @@ function MarkdownTab({ tab, vaultEntry, agentName, requestVaultFile, writeVaultF
       if (ok) {
         setSavingState('saved');
         setSavedAt(Date.now());
-        setTimeout(() => setSavingState(s => (s === 'saved' ? 'idle' : s)), 1200);
+        // Hold "saved" full-opacity for 3.6s, fade for 400ms, then drop to idle
+        // (which renders the muted "saved Xs ago" tail). Per redesign spec.
+        setTimeout(() => setSavingState(s => (s === 'saved' ? 'saved-fading' : s)), 3600);
+        setTimeout(() => setSavingState(s => (s === 'saved-fading' ? 'idle' : s)), 4000);
       } else {
         setSavingState('error');
       }
@@ -288,51 +448,246 @@ function MarkdownTab({ tab, vaultEntry, agentName, requestVaultFile, writeVaultF
     }
   };
 
-  // status pill text
-  let statusText = '';
-  let statusColor = 'var(--sb-fg-disabled)';
-  if (!loaded && !vaultEntry?.error) statusText = 'loading…';
-  else if (vaultEntry?.error) { statusText = '⚠ ' + vaultEntry.error; statusColor = '#d93b25'; }
-  else if (savingState === 'pending') statusText = '○ saving…';
-  else if (savingState === 'saved') { statusText = '● saved'; statusColor = '#2a8c4a'; }
-  else if (savingState === 'error') { statusText = '⚠ save failed'; statusColor = '#d93b25'; }
-  else if (savedAt) {
+  // Save pill — derive a tone (color token) and a label per state. The redesign
+  // brief specifies SAVING (yellow) / SAVED (green) / CONFLICT (red), with SAVED
+  // fading out after a short hold. Loading and quiet "live" states render in the
+  // muted disabled tone so the pill doesn't shout when nothing is happening.
+  let pill;
+  if (!loaded && !vaultEntry?.error) {
+    pill = { tone: 'var(--sb-fg-disabled)', label: 'loading' };
+  } else if (vaultEntry?.error) {
+    pill = { tone: 'var(--sb-pill-conflict)', label: 'conflict' };
+  } else if (savingState === 'pending') {
+    pill = { tone: 'var(--sb-pill-saving)', label: 'saving' };
+  } else if (savingState === 'saved') {
+    pill = { tone: 'var(--sb-pill-saved)', label: 'saved' };
+  } else if (savingState === 'saved-fading') {
+    pill = { tone: 'var(--sb-pill-saved)', label: 'saved', fading: true };
+  } else if (savingState === 'error') {
+    pill = { tone: 'var(--sb-pill-conflict)', label: 'save failed' };
+  } else if (savedAt) {
     const sec = Math.max(0, Math.floor((Date.now() - savedAt) / 1000));
-    statusText = sec < 60 ? `● saved ${sec}s ago` : `● saved ${Math.floor(sec / 60)}m ago`;
-  } else statusText = '● live';
+    pill = { tone: 'var(--sb-fg-disabled)', label: sec < 60 ? `saved ${sec}s ago` : `saved ${Math.floor(sec / 60)}m ago` };
+  } else {
+    pill = { tone: 'var(--sb-fg-disabled)', label: 'live' };
+  }
 
   return (
     <div className="md-editor">
       <div className="md-head">
-        <span className="marker">/// VAULT · {agentName || tab.badge || agentId.slice(0, 6)}</span>
-        <span style={{ color: 'var(--sb-fg-muted)', fontSize: 12 }}>{path}</span>
-        <span style={{ marginLeft: 'auto', fontFamily: 'var(--sb-font-mono)', fontSize: 10, color: statusColor }}>
-          {statusText}
+        {/* Breadcrumb-style path: AGENT / FOLDER / FILE.MD — uppercase mono.
+            Replaces the older `/// VAULT · agent` + plain path duo. */}
+        <span style={{
+          fontFamily: 'var(--sb-font-mono)', fontSize: 10.5, letterSpacing: '0.06em',
+          color: 'var(--sb-fg-faint)',
+          textTransform: 'uppercase',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          minWidth: 0,
+        }}>
+          {[(agentName || tab.badge || agentId.slice(0, 6)), ...path.split('/')].map((seg, i, arr) => (
+            <React.Fragment key={i}>
+              <span style={i === arr.length - 1 ? { color: 'var(--sb-fg-muted)' } : undefined}>{seg}</span>
+              {i < arr.length - 1 && <span style={{ color: 'var(--sb-fg-disabled)', margin: '0 6px' }}>/</span>}
+            </React.Fragment>
+          ))}
+        </span>
+        <span style={{
+          marginLeft: 'auto',
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          padding: '4px 10px', borderRadius: 999,
+          fontFamily: 'var(--sb-font-mono)', fontSize: 10, letterSpacing: '0.06em',
+          color: pill.tone,
+          border: `1px solid color-mix(in srgb, ${pill.tone} 40%, transparent)`,
+          background: `color-mix(in srgb, ${pill.tone} 8%, transparent)`,
+          textTransform: 'lowercase',
+          opacity: pill.fading ? 0 : 1,
+          transition: 'opacity 400ms ease',
+          flexShrink: 0,
+        }}>
+          <span style={{
+            width: 5, height: 5, borderRadius: '50%', background: pill.tone, flexShrink: 0,
+          }} />
+          {pill.label}
         </span>
       </div>
-      <textarea
-        className="md-body"
-        value={draft}
-        onChange={(e) => scheduleSave(e.target.value)}
-        onKeyDown={onKeyDown}
-        spellCheck={false}
-        placeholder={loaded ? '' : '…'}
-        readOnly={!!vaultEntry?.error}
-        style={{
-          flex: 1,
-          width: '100%',
-          background: 'transparent',
-          border: 'none',
-          outline: 'none',
-          resize: 'none',
-          color: 'var(--sb-fg)',
-          fontFamily: 'var(--sb-font-mono)',
-          fontSize: 13,
-          lineHeight: 1.6,
-          padding: '18px 22px',
-          tabSize: 2,
-        }}
-      />
+      {/* Body is a row: editor left (flex 1), 200px outline rail right.
+          Layered editor: textarea below carries the editing/caret; overlay on top
+          paints the visible text and turns [[wikilinks]] into clickable <a>s.
+          - textarea text is transparent (caret stays visible via caret-color)
+          - overlay has pointer-events: none so clicks fall through to the textarea
+            EXCEPT on .wikilink anchors which set pointer-events: auto.
+          - overlay scrollTop is mirrored from the textarea on scroll. */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <textarea
+          className="md-body"
+          value={draft}
+          onChange={(e) => scheduleSave(e.target.value)}
+          onScroll={(e) => { if (overlayRef.current) overlayRef.current.scrollTop = e.target.scrollTop; }}
+          onKeyDown={onKeyDown}
+          spellCheck={false}
+          placeholder={loaded ? '' : '…'}
+          readOnly={!!vaultEntry?.error}
+          style={{
+            position: 'absolute', inset: 0,
+            width: '100%', height: '100%',
+            background: 'transparent',
+            border: 'none',
+            outline: 'none',
+            resize: 'none',
+            color: 'transparent',
+            caretColor: 'var(--sb-accent)',
+            fontFamily: 'var(--sb-font-mono)',
+            fontSize: 13,
+            lineHeight: 1.6,
+            padding: '32px 56px 40px',
+            tabSize: 2,
+          }}
+        />
+        <pre
+          ref={overlayRef}
+          aria-hidden="true"
+          style={{
+            position: 'absolute', inset: 0, margin: 0,
+            padding: '32px 56px 40px',
+            fontFamily: 'var(--sb-font-mono)',
+            fontSize: 13,
+            lineHeight: 1.6,
+            tabSize: 2,
+            color: 'var(--sb-fg)',
+            background: 'transparent',
+            whiteSpace: 'pre-wrap',
+            overflow: 'hidden',
+            pointerEvents: 'none',
+          }}
+        >
+          {parseWikilinks(draft).map((p, i) => {
+            if (typeof p === 'string') return <React.Fragment key={i}>{p}</React.Fragment>;
+            const resolved = resolveWikilink(p.wikilink, vaultFiles);
+            const exists = !!resolved;
+            return (
+              <a
+                key={i}
+                href="#"
+                title={exists ? `open ${resolved} in a new tab` : `no file matches ${p.wikilink}`}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (exists) openWikilink(p.wikilink); }}
+                style={{
+                  pointerEvents: 'auto',
+                  color: exists ? 'var(--sb-kind-file)' : 'inherit',
+                  opacity: exists ? 1 : 0.45,
+                  cursor: exists ? 'pointer' : 'default',
+                  textDecoration: 'none',
+                  borderBottom: exists ? '1px dashed rgba(127,182,217,0.5)' : 'none',
+                }}
+              >[[{p.wikilink}]]</a>
+            );
+          })}
+          {/* trailing newline so the overlay's last line has the same height as the textarea's */}
+          {'\n'}
+        </pre>
+      </div>
+      <OutlineRail draft={draft} path={path} vaultEdges={vaultEdges} savedAt={savedAt}
+                   onOpenFile={(p) => onOpenFile && onOpenFile(agentId, p)} />
+      </div>
+    </div>
+  );
+}
+
+// Right-side rail in the markdown editor: H1/H2 outline of the current file +
+// backlinks (other vault files in this agent that wikilink to this one) + meta
+// (word count, relative time since last save). Layout per the May 2026 redesign.
+function OutlineRail({ draft, path, vaultEdges, savedAt, onOpenFile }) {
+  const headings = React.useMemo(() => {
+    if (!draft) return [];
+    return draft.split('\n')
+      .map((line, i) => ({ line, i }))
+      .filter(x => /^#{1,2}\s+\S/.test(x.line))
+      .map(x => ({
+        level: (x.line.match(/^(#{1,2})/) || ['', ''])[1].length,
+        text:  x.line.replace(/^#{1,2}\s+/, '').trim(),
+      }));
+  }, [draft]);
+
+  const wordCount = React.useMemo(() => {
+    if (!draft) return 0;
+    return draft.trim().split(/\s+/).filter(Boolean).length;
+  }, [draft]);
+
+  // Backlinks: edges in this agent's vault where the target matches our path
+  // (exact or by basename suffix, since wikilinks are usually bare names).
+  const backlinks = React.useMemo(() => {
+    if (!Array.isArray(vaultEdges) || !path) return [];
+    const base = path.split('/').pop() || path;
+    const baseNoExt = base.replace(/\.[^.]+$/, '');
+    const out = new Set();
+    for (const e of vaultEdges) {
+      const to = e[1];
+      if (!to) continue;
+      if (to === path || to === base || to === baseNoExt) out.add(e[0]);
+    }
+    return Array.from(out);
+  }, [vaultEdges, path]);
+
+  const relTime = (() => {
+    if (!savedAt) return null;
+    const sec = Math.max(0, Math.floor((Date.now() - savedAt) / 1000));
+    if (sec < 60) return `${sec}s ago`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.floor(min / 60);
+    return `${hr}h ago`;
+  })();
+
+  return (
+    <div style={{
+      width: 200, flexShrink: 0,
+      borderLeft: '1px solid var(--sb-line)',
+      padding: '32px 16px',
+      fontFamily: 'var(--sb-font-mono)', fontSize: 11,
+      color: 'var(--sb-fg-muted)',
+      overflow: 'auto', minHeight: 0,
+    }}>
+      <div style={{ color: 'var(--sb-fg-faint)', letterSpacing: '0.06em', marginBottom: 8 }}>/// outline</div>
+      {headings.length === 0
+        ? <div style={{ color: 'var(--sb-fg-disabled)', fontSize: 10.5, marginBottom: 18 }}>no headings</div>
+        : <div style={{ marginBottom: 18 }}>
+            {headings.map((h, i) => (
+              <div key={i} style={{
+                paddingLeft: h.level === 1 ? 12 : 22,
+                paddingTop: 3, paddingBottom: 3,
+                color: 'var(--sb-fg-muted)',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }} title={h.text}>{h.text}</div>
+            ))}
+          </div>
+      }
+
+      <div style={{ color: 'var(--sb-fg-faint)', letterSpacing: '0.06em', marginBottom: 8 }}>/// backlinks</div>
+      {backlinks.length === 0
+        ? <div style={{ color: 'var(--sb-fg-disabled)', fontSize: 10.5, marginBottom: 18 }}>none</div>
+        : <div style={{ marginBottom: 18 }}>
+            {backlinks.map((b, i) => (
+              <div key={i}
+                onClick={() => onOpenFile && onOpenFile(b)}
+                style={{
+                  cursor: 'pointer', color: 'var(--sb-kind-file)',
+                  padding: '3px 0',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}
+                title={`open ${b}`}
+              >{b}</div>
+            ))}
+          </div>
+      }
+
+      <div style={{ color: 'var(--sb-fg-disabled)', fontSize: 10.5, marginTop: 4 }}>
+        {wordCount} {wordCount === 1 ? 'word' : 'words'}
+      </div>
+      {relTime && (
+        <div style={{ color: 'var(--sb-fg-disabled)', fontSize: 10.5 }}>
+          updated {relTime}
+        </div>
+      )}
     </div>
   );
 }
@@ -641,6 +996,22 @@ function App() {
   });
   useEffectA(() => { try { localStorage.setItem('sq.leftMode', leftMode); } catch {} }, [leftMode]);
 
+  // ⌘1 / ⌘2 (Ctrl on non-Mac) toggle left sidebar Sessions/Agents. Skips when
+  // an editable element is focused so it doesn't hijack textareas / inputs.
+  useEffectA(() => {
+    const onKey = (e) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.altKey || e.shiftKey) return;
+      if (e.key !== '1' && e.key !== '2') return;
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      e.preventDefault();
+      setLeftMode(e.key === '1' ? 'list' : 'agents');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Mode-bar keyboard shortcuts. Stored as { actionId: keyString }, persisted.
   const DEFAULT_SHORTCUTS = { select: '1', spawn: '2', wall: '3', router: '4', erase: '5' };
   const [shortcuts, setShortcuts] = useStateA(() => {
@@ -722,7 +1093,6 @@ function App() {
       }
       if (event.type === 'auto-trigger-paused') {
         // Soft signal — UI could show a chip later. Logged for now.
-        // eslint-disable-next-line no-console
         console.log('[squadron] auto-trigger paused', event.pairKey, 'reason:', event.reason);
         return;
       }
@@ -821,9 +1191,7 @@ function App() {
             return prev === wasOld ? 'file:' + event.agentId + ':' + event.newPath : prev;
           });
         } else {
-          // eslint-disable-next-line no-console
           console.warn('[squadron] vault-file-moved rejected:', event.oldPath, '→', event.newPath, event.error);
-          // eslint-disable-next-line no-alert
           window.alert('rename failed: ' + (event.error || 'unknown'));
         }
         return;
@@ -839,7 +1207,6 @@ function App() {
           });
           setTabs(prev => prev.filter(t => !(t.kind === 'file' && t.agentId === event.agentId && t.path === event.path)));
         } else {
-          // eslint-disable-next-line no-console
           console.warn('[squadron] vault-file-deleted rejected:', event.path, event.error);
         }
         return;
@@ -848,7 +1215,6 @@ function App() {
         // Echoed for telemetry / multi-tab confirmation. The companion vault-file-content
         // broadcast (if ok) carries the new content, so we don't have to react here.
         if (!event.ok) {
-          // eslint-disable-next-line no-console
           console.warn('[squadron] vault write rejected:', event.path, event.error);
         }
         return;
@@ -1016,8 +1382,42 @@ function App() {
     };
   }, []);
 
-  const [tabs, setTabs] = useStateA([{ id: 'grid', kind: 'grid', title: 'The Grid' }]);
-  const [activeTab, setActiveTab] = useStateA('grid');
+  // Open tabs + active tab persist across reload via localStorage. Restored tabs
+  // re-render their content from scratch — file tabs re-fetch via MarkdownTab's
+  // first-render effect; vault-preview tabs re-render from their stored path.
+  // If a restored tab references an agent that no longer exists, the tab still
+  // renders and surfaces its own error state (not pruned at hydration time
+  // because the agents list arrives async from the daemon).
+  const [tabs, setTabs] = useStateA(() => {
+    try {
+      const raw = localStorage.getItem('squadron.openTabs');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.some(t => t && t.id === 'grid')) return parsed;
+      }
+    } catch {}
+    return [{ id: 'grid', kind: 'grid', title: 'The Grid' }];
+  });
+  const [activeTab, setActiveTab] = useStateA(() => {
+    try {
+      const tabsRaw = localStorage.getItem('squadron.openTabs');
+      const activeRaw = localStorage.getItem('squadron.activeTab');
+      if (tabsRaw && activeRaw) {
+        const tabsParsed = JSON.parse(tabsRaw);
+        const activeParsed = JSON.parse(activeRaw);
+        if (Array.isArray(tabsParsed) && tabsParsed.some(t => t && t.id === activeParsed)) {
+          return activeParsed;
+        }
+      }
+    } catch {}
+    return 'grid';
+  });
+  useEffectA(() => {
+    try { localStorage.setItem('squadron.openTabs', JSON.stringify(tabs)); } catch {}
+  }, [tabs]);
+  useEffectA(() => {
+    try { localStorage.setItem('squadron.activeTab', JSON.stringify(activeTab)); } catch {}
+  }, [activeTab]);
 
   const [connections, setConnections] = useStateA([
     { provider: 'claude', connType: 'cli-sub', label: 'claude · subscription via cli' },
@@ -1112,7 +1512,6 @@ function App() {
       },
     });
     // intentionally only on focusedAgentId change — name updates etc shouldn't re-trigger
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedAgentId]);
 
   // ---------- Derived conversations list (M1: synthesized from agents + adjacency) ----------
@@ -1222,10 +1621,6 @@ function App() {
     return out;
   }, [agents, realChats, routers, interAgentChats]);
 
-  // Autonomous walk loop — disabled. The seeded "Lyra" agent it drove no longer exists; once
-  // M2/M3 land, agent movement comes from the daemon, not a client-side scripted demo.
-  useEffectA(() => { /* no-op for now */ }, [autoWalkOn, killed, walls]);
-
   // Mock loop-detector flag — toggles every 18s on inter-agent.
   useEffectA(() => {
     const id = setInterval(() => setLoopFlag(f => !f), 9000);
@@ -1297,10 +1692,14 @@ function App() {
     if (next.name !== prev.name)             patch.name         = next.name;
     if (next.glyph !== prev.glyph)           patch.glyph        = next.glyph;
     if (next.color !== prev.color)           patch.color        = next.color;
-    if (next.sysPrompt !== prev.systemPrompt && next.sysPrompt !== prev.sysPrompt) patch.systemPrompt = next.sysPrompt;
+    if (next.sysPrompt !== prev.sysPrompt)   patch.systemPrompt = next.sysPrompt;
     if (next.model !== prev.model)           patch.model        = next.model;
     if (next.movementEnabled !== prev.movementEnabled) patch.movementEnabled = !!next.movementEnabled;
     if (Object.keys(patch).length === 0) return;
+    // Optimistic local update — keeps controlled inputs (checkbox, color picker)
+    // from snapping back to the old value while we wait for the daemon's
+    // agent-updated broadcast. The broadcast still arrives and re-syncs.
+    setAgents(prevAgents => prevAgents.map(a => a.id === next.id ? { ...a, ...patch, sysPrompt: patch.systemPrompt ?? a.sysPrompt } : a));
     sendToDaemon({ type: 'update-agent', agentId: next.id, patch });
   };
 
@@ -1421,7 +1820,6 @@ function App() {
   const handleDeleteTabFile = (id) => {
     const t = tabs.find(x => x.id === id);
     if (!t || t.kind !== 'file') return;
-    // eslint-disable-next-line no-alert
     if (!window.confirm(`delete "${t.path}" from ${t.badge || 'this agent'}'s vault?\n\nthis removes the file from disk. it cannot be undone.`)) return;
     sendToDaemon({ type: 'delete-vault-file', agentId: t.agentId, path: t.path });
     handleCloseTab(id);
@@ -1489,8 +1887,15 @@ function App() {
             const activeTabObj = tabs.find(t => t.id === activeTab);
             const inGraphMode = activeTabObj && activeTabObj.kind === 'memory-graph';
             if (leftMode === 'agents') {
+              // Click split (May 2026 redesign): single click focuses without
+              // navigating; double-click / Enter opens the agent's chat. In
+              // graph mode, single-click rebinds the graph view (legacy
+              // behavior — chat-open path doesn't apply).
               const onPick = inGraphMode
                 ? handleSwitchGraphAgent
+                : (id) => setFocusedAgentId(id);
+              const onOpen = inGraphMode
+                ? null
                 : (id) => {
                     setFocusedAgentId(id);
                     const conv = conversations.find(c => c.kind === 'user' && c.agentId === id);
@@ -1503,7 +1908,9 @@ function App() {
                 agents={agents}
                 selectedId={selectedId}
                 onPick={onPick}
+                onOpen={onOpen}
                 modeBadge={inGraphMode ? 'VIEWING' : 'FOCUSED'}
+                onSpawnNew={() => { setActiveTab('grid'); setMode('spawn'); }}
               />;
             }
             return <LeftList
@@ -1524,7 +1931,10 @@ function App() {
                 if (!c) return c;
                 if (c.kind === 'user') {
                   const a = agents.find(x => x.id === c.agentId);
-                  return a ? { ...c, label: a.name, status: a.status === 'archived' ? 'archived' : 'live' } : c;
+                  // Daemon only returns 'Live' / 'Draft' for agent.status; there's
+                  // no 'archived' state today. Always treat user-DM conversations
+                  // as live until we model archive explicitly.
+                  return a ? { ...c, label: a.name, status: 'live' } : c;
                 }
                 if (c.kind === 'inter' && Array.isArray(c.agentIds) && c.agentIds.length === 2) {
                   const a = agents.find(x => x.id === c.agentIds[0]);
@@ -1558,6 +1968,7 @@ function App() {
       <div className="center">
         <Tabs
           tabs={tabs}
+          agents={agents}
           activeId={activeTab}
           onActivate={setActiveTab}
           onClose={handleCloseTab}
@@ -1565,6 +1976,12 @@ function App() {
           onPin={handlePinTab}
           onDuplicate={handleDuplicateTab}
           onDelete={handleDeleteTabFile}
+          onCloseOthers={(keepId) => setTabs(prev => prev.filter(x => x.kind === 'grid' || x.id === keepId))}
+          onRename={(tabId, newPath) => {
+            const t = tabs.find(x => x.id === tabId);
+            if (!t || t.kind !== 'file') return;
+            sendToDaemon({ type: 'move-vault-file', agentId: t.agentId, oldPath: t.path, newPath });
+          }}
         />
         {activeTab === 'grid'
           ? <HexGrid agents={agents} setAgents={setAgents}
@@ -1603,7 +2020,7 @@ function App() {
                 }
                 if (tab.kind === 'vault-preview') {
                   const ag = agents.find(a => a.id === tab.agentId);
-                  const src = `${window.location.origin}/vault/${tab.agentId}/${tab.path}`;
+                  const src = vaultUrl(tab.agentId, tab.path);
                   const isHtml = /\.html?$/i.test(tab.path);
                   const isImg = /\.(png|jpe?g|gif|webp|svg)$/i.test(tab.path);
                   const isVideo = /\.(mp4|webm|mov)$/i.test(tab.path);
@@ -1656,8 +2073,11 @@ function App() {
                   tab={tab}
                   vaultEntry={entry}
                   agentName={ag?.name || tab.badge}
+                  vaultFiles={ag?.vaultFiles || []}
+                  vaultEdges={ag?.vaultEdges || []}
                   requestVaultFile={(aid, p) => sendToDaemon({ type: 'read-vault-file', agentId: aid, path: p })}
                   writeVaultFile={(aid, p, c) => sendToDaemon({ type: 'write-vault-file', agentId: aid, path: p, content: c })}
+                  onOpenFile={handleOpenVaultFile}
                 />;
               })()}
       </div>
@@ -1668,16 +2088,22 @@ function App() {
           // becomes a per-file panel for that agent's vault (rename, color,
           // links, delete). Otherwise the standard agent-config view.
           const activeTabObj = tabs.find(t => t.id === activeTab);
-          if (activeTabObj && activeTabObj.kind === 'memory-graph') {
+          const inGraphMode = activeTabObj && activeTabObj.kind === 'memory-graph';
+          // Key drives the 120ms cross-fade between modes — re-keying remounts
+          // the inner subtree, which re-runs the panel-fade animation.
+          const panelKey = inGraphMode
+            ? `files:${activeTabObj.agentId}`
+            : `config:${focusedAgent?.id || 'none'}`;
+          let inner;
+          if (inGraphMode) {
             const ag = agents.find(a => a.id === activeTabObj.agentId);
-            return (
+            inner = (
               <MemoryGraphFilesPanel
                 agent={ag}
                 nodeColors={nodeColors}
                 setNodeColor={setNodeColor}
                 onOpenFile={handleOpenFile}
                 onDeleteFile={(aid, p) => {
-                  // eslint-disable-next-line no-alert
                   if (!window.confirm(`delete "${p}" from this agent's vault?\n\nthis removes the file from disk. it cannot be undone.`)) return;
                   sendToDaemon({ type: 'delete-vault-file', agentId: aid, path: p });
                 }}
@@ -1686,19 +2112,27 @@ function App() {
                 }}
               />
             );
+          } else {
+            inner = (
+              <AgentConfig
+                agent={focusedAgent}
+                onChange={updateAgent}
+                onOpenFile={handleOpenFile}
+                onOpenMemoryGraph={openMemoryGraph}
+                nodeColors={nodeColors}
+                connections={connections}
+                openWizard={openWizard}
+                onInstallSkill={(agentId, name, content) => sendToDaemon({ type: 'install-skill', agentId, name, content })}
+                onUninstallSkill={(agentId, name) => sendToDaemon({ type: 'uninstall-skill', agentId, name })}
+              />
+            );
           }
           return (
-            <AgentConfig
-              agent={focusedAgent}
-              onChange={updateAgent}
-              onOpenFile={handleOpenFile}
-              onOpenMemoryGraph={openMemoryGraph}
-              nodeColors={nodeColors}
-              connections={connections}
-              openWizard={openWizard}
-              onInstallSkill={(agentId, name, content) => sendToDaemon({ type: 'install-skill', agentId, name, content })}
-              onUninstallSkill={(agentId, name) => sendToDaemon({ type: 'uninstall-skill', agentId, name })}
-            />
+            <div key={panelKey} style={{
+              animation: 'panel-fade 120ms ease',
+              display: 'flex', flexDirection: 'column',
+              flex: 1, minHeight: 0, height: '100%',
+            }}>{inner}</div>
           );
         })()}
       </div>
