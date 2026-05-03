@@ -242,6 +242,68 @@ export class World extends EventEmitter {
    * Routers are passable terrain (they don't block movement; they only matter
    * for adjacency-of-conversation).
    */
+  /**
+   * Path to land ON a specific hex (not adjacent to it). Used by move_to(q, r).
+   * Refuses targets that are walls or occupied by another agent. Returns
+   * { ok: true, path: [] } when caller is already at the destination.
+   */
+  findPathToHex(
+    fromQ: number,
+    fromR: number,
+    toQ: number,
+    toR: number,
+    opts: { maxHops?: number; ignoreAgentIds?: ReadonlySet<string> } = {},
+  ): PathResult {
+    if (fromQ === toQ && fromR === toR) return { ok: true, path: [] };
+
+    const wallSet = new Set(
+      this.features().filter((f) => f.kind === "wall").map((f) => hexKey(f.q, f.r))
+    );
+    const ignore = opts.ignoreAgentIds ?? new Set<string>();
+    const agentSet = new Set(
+      this.agents().filter((a) => !ignore.has(a.id)).map((a) => hexKey(a.q, a.r))
+    );
+
+    const goalKey = hexKey(toQ, toR);
+    if (wallSet.has(goalKey)) return { ok: false, reason: `(q=${toQ}, r=${toR}) is a wall` };
+    if (agentSet.has(goalKey)) return { ok: false, reason: `(q=${toQ}, r=${toR}) is occupied by another agent` };
+
+    const maxHops = opts.maxHops ?? 200;
+    const startKey = hexKey(fromQ, fromR);
+    const came = new Map<string, { q: number; r: number; prev: string | null; depth: number }>();
+    came.set(startKey, { q: fromQ, r: fromR, prev: null, depth: 0 });
+    const queue: string[] = [startKey];
+
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      const node = came.get(cur)!;
+      if (node.depth >= maxHops) continue;
+      for (const [dq, dr] of HEX_DIRS) {
+        const nq = node.q + dq;
+        const nr = node.r + dr;
+        const nk = hexKey(nq, nr);
+        if (came.has(nk)) continue;
+        if (wallSet.has(nk)) continue;
+        // Allow stepping onto the goal hex even though it's the only "agent-permitted"
+        // exception we make — the goal is a free hex by the checks above.
+        if (agentSet.has(nk) && nk !== goalKey) continue;
+        came.set(nk, { q: nq, r: nr, prev: cur, depth: node.depth + 1 });
+        if (nk === goalKey) {
+          const path: Array<{ q: number; r: number }> = [];
+          let walk: string | null = nk;
+          while (walk !== null && walk !== startKey) {
+            const w: { q: number; r: number; prev: string | null; depth: number } = came.get(walk)!;
+            path.unshift({ q: w.q, r: w.r });
+            walk = w.prev;
+          }
+          return { ok: true, path };
+        }
+        queue.push(nk);
+      }
+    }
+    return { ok: false, reason: `no path to (q=${toQ}, r=${toR})` };
+  }
+
   findPath(
     fromQ: number,
     fromR: number,

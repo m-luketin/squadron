@@ -12,7 +12,7 @@
 //
 // URL shape: /mcp/agent/<agentId>     (agentId identifies the calling agent)
 
-import { sendTo, readNeighborVault, moveToward, TOOL_DEFINITIONS, type AgentMover } from "./world-tools.ts";
+import { sendTo, readNeighborVault, moveToward, moveTo, TOOL_DEFINITIONS, type AgentMover } from "./world-tools.ts";
 import type { World } from "./world.ts";
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -140,6 +140,8 @@ function handleMethod(
           toolResult = readNeighborVault(world, agentId, argsIn as Record<string, unknown>);
         } else if (name === "move_toward") {
           toolResult = moveToward(world, mover, agentId, argsIn as Record<string, unknown>);
+        } else if (name === "move_to") {
+          toolResult = moveTo(world, mover, agentId, argsIn as Record<string, unknown>);
         } else {
           return makeError(id, -32601, `Unknown tool: ${name}`);
         }

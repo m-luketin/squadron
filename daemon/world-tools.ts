@@ -34,6 +34,13 @@ export interface AgentMover {
     hops?: number;
     etaMs?: number;
   };
+  /** Start a walk from caller to an exact hex coordinate. */
+  startWalkToHex(callerId: string, q: number, r: number): {
+    ok: boolean;
+    reason?: string;
+    hops?: number;
+    etaMs?: number;
+  };
 }
 
 interface SendToArgs {
@@ -46,6 +53,10 @@ interface ReadNeighborVaultArgs {
 }
 interface MoveTowardArgs {
   name?: unknown;
+}
+interface MoveToArgs {
+  q?: unknown;
+  r?: unknown;
 }
 
 function findAgentByName(world: World, name: string) {
@@ -160,6 +171,36 @@ export function moveToward(
   };
 }
 
+export function moveTo(
+  world: World,
+  mover: AgentMover,
+  callerId: string,
+  args: MoveToArgs,
+): ToolResult {
+  if (typeof args.q !== "number" || typeof args.r !== "number" || !Number.isFinite(args.q) || !Number.isFinite(args.r)) {
+    return { ok: false, error: "missing or invalid 'q' / 'r' arguments — both must be integers" };
+  }
+  const q = Math.trunc(args.q);
+  const r = Math.trunc(args.r);
+
+  const caller = world.agent(callerId);
+  if (!caller) return { ok: false, error: "caller agent not found" };
+  if (!caller.movementEnabled) {
+    return {
+      ok: false,
+      error: "movement is disabled for you. The user must enable it in the right-sidebar agent config (Movement toggle) before you can walk.",
+    };
+  }
+
+  const result = mover.startWalkToHex(caller.id, q, r);
+  if (!result.ok) return { ok: false, error: result.reason ?? "could not start walk" };
+
+  if ((result.hops ?? 0) === 0) {
+    return { ok: true, walking: false, hops: 0 };
+  }
+  return { ok: true, walking: true, hops: result.hops, etaMs: result.etaMs };
+}
+
 /** MCP tool catalog — exposed by mcp-server.ts at tools/list. */
 export const TOOL_DEFINITIONS = [
   {
@@ -203,6 +244,22 @@ export const TOOL_DEFINITIONS = [
         name: { type: "string", description: "The target agent's name (case-insensitive)." },
       },
       required: ["name"],
+    },
+  },
+  {
+    name: "move_to",
+    description:
+      "Walk to a specific hex coordinate (no other agent required). Useful for repositioning " +
+      "yourself anywhere on the grid — claim a corner, get out of someone's way, line up next " +
+      "to a router. Returns ETA. The daemon advances one hex at a time; on arrival you get a " +
+      "system message but no auto-prompt (you walked here on purpose, the next move is yours).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        q: { type: "integer", description: "Target hex column (q axis)." },
+        r: { type: "integer", description: "Target hex row (r axis)." },
+      },
+      required: ["q", "r"],
     },
   },
 ] as const;
