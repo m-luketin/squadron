@@ -143,6 +143,19 @@ bun run whitelist      # whitelist token CLI
 bun run up / down      # full-stack bring-up / teardown
 ```
 
+## Publishing
+
+Releases are published to npm by GitHub Actions via [npm Trusted Publishers](https://docs.npmjs.com/trusted-publishers) (OIDC). No tokens are stored in the repo or in CI secrets.
+
+To cut a release:
+
+```bash
+npm version patch          # or minor / major — bumps package.json + creates a git tag
+git push --follow-tags     # pushes the new tag
+```
+
+Pushing a `v*.*.*` tag triggers `.github/workflows/publish.yml`, which publishes to npm with provenance attestation.
+
 See [`spec.md`](./spec.md) for the full product spec — strategic positioning, foundational architectural decisions, three-phase rollout, anti-patterns.
 
 ---
