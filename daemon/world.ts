@@ -297,7 +297,7 @@ export class World extends EventEmitter {
           const path: Array<{ q: number; r: number }> = [];
           let walk: string | null = nk;
           while (walk !== null && walk !== startKey) {
-            const w = came.get(walk)!;
+            const w: { q: number; r: number; prev: string | null; depth: number } = came.get(walk)!;
             path.unshift({ q: w.q, r: w.r });
             walk = w.prev;
           }

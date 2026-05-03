@@ -8,7 +8,7 @@
 import type { ClientToDaemon, DaemonToClient } from "../daemon/protocol.ts";
 
 const WS_URL = process.env.SQUADRON_WS_URL ?? "ws://localhost:7878/ws";
-const AGENT_ID = "test-1";
+let agentId = "";
 
 const ANSI = {
   dim:    "\x1b[2m",
@@ -38,8 +38,7 @@ let killRequested = false;
 ws.addEventListener("open", () => {
   console.log(`${ANSI.green}● connected${ANSI.reset}`);
   send({
-    type: "spawn-agent",
-    id: AGENT_ID,
+    type: "create-agent",
     name: "Atlas",
     systemPrompt: "You are a helpful test agent. Be terse.",
   });
@@ -55,13 +54,18 @@ ws.addEventListener("message", (msg) => {
   }
 
   switch (event.type) {
+    case "agent-created":
+      agentId = event.agent.id;
+      log("agent-created", `agentId=${agentId}`);
+      send({ type: "boot-agent", agentId });
+      break;
+
     case "agent-spawned":
       sessionId = event.sessionId;
       log("agent-spawned", `sessionId=${event.sessionId ?? "(pending)"}`);
-      // Send the test prompt immediately.
       send({
         type: "send-message",
-        agentId: AGENT_ID,
+        agentId,
         text: "Reply with exactly the word OK and nothing else. No punctuation.",
       });
       break;
@@ -97,7 +101,7 @@ ws.addEventListener("message", (msg) => {
         log("event", `result  total_cost_usd=${totalCostUsd}  duration_ms=${e.duration_ms}`);
         // We have a result — kill the agent and finish.
         killRequested = true;
-        send({ type: "kill-agent", agentId: AGENT_ID });
+        send({ type: "kill-agent", agentId });
       } else {
         log("event", `${t}${sub ? "/" + sub : ""}`);
       }

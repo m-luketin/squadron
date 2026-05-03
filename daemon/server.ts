@@ -501,7 +501,7 @@ export function startServer(opts: StartServerOptions): RunningServer {
     return true;
   }
 
-  const server = Bun.serve<ConnState, undefined>({
+  const server = Bun.serve<ConnState>({
     hostname: opts.host,
     port: opts.port,
 
