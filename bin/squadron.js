@@ -1,9 +1,15 @@
 #!/usr/bin/env node
-// Squadron CLI entry — `npx @m-luketin/squadron`.
+// Squadron CLI entry — `npx @m-luketin/squadron [--public]`.
 // This is a tiny Node bootstrapper that:
 //   1. Confirms the prerequisites (Bun, claude-code) are present
-//   2. Hands off to scripts/bringup.sh which boots daemon + static + tunnels
-//   3. Forwards Ctrl+C to bringup so the user can stop with one keystroke
+//   2. With --public: confirms cloudflared, generates a whitelist token if
+//      none exists, and threads it through the printed URL
+//   3. Hands off to scripts/bringup.sh which boots daemon + static (and,
+//      only when --public is passed, two cloudflared quick tunnels)
+//   4. Forwards Ctrl+C to bringup so the user can stop with one keystroke
+//
+// LOCAL-ONLY BY DEFAULT — the daemon binds 127.0.0.1; nothing is reachable
+// from the internet or LAN unless --public is passed.
 //
 // The daemon itself is Bun-only (uses bun:sqlite + Bun.serve + Bun.spawn),
 // which is why we shell out to bun rather than running everything in Node.

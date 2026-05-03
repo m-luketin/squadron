@@ -31,7 +31,15 @@ What that gets you:
 npx @m-luketin/squadron
 ```
 
-That's it. The CLI checks your dependencies, starts the daemon + static server + tunnels, and prints the URL to open in your browser. `Ctrl+C` shuts everything down cleanly. Run it again any time to restart — your agents and worlds live in `~/.hexagent/` and persist across sessions.
+That's it. The CLI checks your dependencies, starts the daemon + static server, and prints a `http://localhost:8787/Squadron.html?...` URL to open in your browser. **Local-only by default** — daemon binds `127.0.0.1`, nothing exposed to the internet or LAN. `Ctrl+C` shuts everything down cleanly. Run it again any time to restart — your agents and worlds live in `~/.hexagent/` and persist across sessions.
+
+Want to access Squadron from another device (phone, another laptop)? Pass `--public`:
+
+```bash
+npx @m-luketin/squadron --public
+```
+
+That spins up two cloudflared quick tunnels and auto-generates a whitelist token saved to `~/.hexagent/whitelist.json`. The printed URL includes `?token=...` — anyone with that URL can control your agents, so treat it like a password. Revoke any time with `bun run whitelist revoke <token>`.
 
 `npx` always uses the latest published version, so updates land automatically.
 

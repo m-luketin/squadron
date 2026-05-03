@@ -36,7 +36,7 @@ const AGENTS: DemoAgent[] = [
     vaultFiles: {
       "index.md":
         "# Tutor\n\n" +
-        "I'm the welcome face. Ask me anything about [[squadron|what this is]] or what to do first.\n\n" +
+        "I'm the welcome face. Ask me anything about Squadron or what to do first.\n\n" +
         "**Try:** \"what is squadron?\" / \"what can I do here?\" / \"show me the memory graph\"\n\n" +
         "## Who else is here\n\n" +
         "- **Architect** — how the system actually runs. Hex grid, MCP wire, daemon, vaults.\n" +
@@ -52,12 +52,12 @@ const AGENTS: DemoAgent[] = [
         "1. **Talk to me** (Tutor). Ask anything. I'll route to my neighbors when needed.\n" +
         "2. **Open the memory graph.** Click my hex on the grid → in the right sidebar, click the small graph. Or open the Memory Graph tab.\n" +
         "3. **Spawn another agent.** Hit `2` (Spawn mode) and click an empty hex. You're the user — you can populate this world.\n" +
-        "4. **Place a wall.** Hit `3`, click between two hexes. Adjacency is the permission model. Walls break it.\n" +
-        "5. **Place a router.** Hit `4`, click two non-adjacent hexes. Routers bridge clusters — agents on the same cluster can talk again.\n\n" +
+        "4. **Place a wall.** Hit `3`, click an empty hex. The hex turns into a wall and blocks movement + adjacency through it. Adjacency is the permission model.\n" +
+        "5. **Place a router.** Hit `4`, click two empty hexes. Routers bridge clusters — agents on hexes connected to the same router cluster can talk even if they aren't direct neighbors.\n\n" +
         "## When you're done playing\n\n" +
-        "- Read [[Spec.index|Spec]] for where this is going.\n" +
-        "- Read [[Architect.index|Architect]] for how it runs under the hood.\n" +
-        "- Read [[Skills.index|Skills]] for installing your own tools.\n",
+        "- Talk to **Architect** for how it runs under the hood.\n" +
+        "- Talk to **Spec** for where this is going.\n" +
+        "- Talk to **Skills** for installing your own tools.\n",
       "tour.md":
         "# Tour\n\n" +
         "## Top bar\n" +
@@ -104,12 +104,12 @@ const AGENTS: DemoAgent[] = [
       "mcp-wire.md":
         "# MCP wire\n\n" +
         "Each agent's claude session is configured with one MCP server: `squadron`, hosted at `http://127.0.0.1:7878/mcp/agent/<agentId>`. " +
-        "The agent's identity is bound to the URL path so the daemon knows who's calling.\n\n" +
-        "Three tools:\n\n" +
+        "The agent's identity is bound to the URL path so the daemon knows who's calling. The endpoint is whitelist-token-gated for non-loopback callers.\n\n" +
+        "Four tools:\n\n" +
         "- `send_to(name, text)` — message a connected agent (adjacent or router-bridged)\n" +
         "- `read_neighbor_vault(name, path)` — read a file from a connected agent's vault\n" +
         "- `move_toward(name)` — walk to be adjacent to another agent\n" +
-        "- `move_to(q, r)` — walk to a specific hex coordinate\n\n" +
+        "- `move_to(q, r)` — walk to a specific hex coordinate (no other agent required)\n\n" +
         "All adjacency-gated against the calling agent's connectedAgents() set (BFS over hex-neighbors + router clusters).\n",
       "walking.md":
         "# Walking\n\n" +
@@ -125,7 +125,8 @@ const AGENTS: DemoAgent[] = [
         "# Security\n\n" +
         "**Local-only by default.** `npx @m-luketin/squadron` binds the daemon to 127.0.0.1 and the static server to 127.0.0.1. No tunnels.\n\n" +
         "**Public mode (`--public`)** auto-generates a whitelist token (saved to `~/.hexagent/whitelist.json`), launches cloudflared tunnels, and prints a single ready-to-use URL with the token baked in. Anyone with the URL controls your agents — treat it like a password.\n\n" +
-        "**Supply chain.** Published via OIDC trusted publisher with SLSA v1 provenance. No `NPM_TOKEN` in CI. Files allowlist enforced.\n",
+        "**Auth gates** (active when whitelist has at least one token): WS upgrade, /vault/<id>/<path> static route, and /mcp/agent/<id> HTTP endpoint all require ?token=<value>. Loopback callers (the local claude subprocess) are exempt from the MCP gate so the agent's own tool calls keep working without a token.\n\n" +
+        "**Supply chain.** Published via OIDC trusted publisher with SLSA v1 provenance. No `NPM_TOKEN` in CI. Files allowlist enforced. Subresource integrity hashes pinned on third-party CDN scripts (marked, dompurify, react, react-dom, babel-standalone).\n",
     },
   },
   {
@@ -155,14 +156,15 @@ const AGENTS: DemoAgent[] = [
         "- **M1** — SQLite (WAL), `--resume`, multi-tab WS sync, restore Live agents on boot\n" +
         "- **M3** — vault folders, MCP HTTP server, walls + routers, inter-agent message persistence + delivery, memory graph reads real vaultFiles\n" +
         "- **M3.5** — per-pair budget + throttle for auto-replies, kill switch in top bar\n" +
-        "- **M6** — `move_toward` (and `move_to(q,r)`) walking with pathfinding, animations, per-agent toggle\n\n" +
+        "- **M6** — `move_toward` (and `move_to(q,r)`) walking with pathfinding, animations, per-agent toggle\n" +
+        "- **M-MultiModel (foundation)** — Worker abstraction + OpenRouter worker (chat-only, free-tier path). Claude is the default; OpenRouter ships as a trial path before users connect their subscription.\n\n" +
         "Next:\n\n" +
+        "- **M-MultiModel (rest)** — Codex worker (gated on ChatGPT-Plus), Gemini, Ollama; per-agent provider picker UI; lazy onboarding card on first send\n" +
         "- **M-Identity** — A2A-style agent cards\n" +
         "- **M-Capabilities** — explicit scoped tokens (replaces 'neighbors can read each other's vault' implicit rule)\n" +
         "- **M-Addressing** — portable URL refs (`squadron://<user>/<agent>/vault/<path>`)\n" +
         "- **M-A2A** — A2A peer protocol replacing the MCP `send_to` shim\n" +
         "- **M-MDContract** — YAML frontmatter contract on coordination files\n" +
-        "- **M-MultiModel** — Gemini + Ollama providers (claude shipped)\n" +
         "- **M4** — full guardrail set: rate cap, cost ceiling, semantic loop detector\n" +
         "- **M5** — Next.js + Tailwind + shadcn migration off the babel-in-browser prototype\n",
       "anti-patterns.md":
@@ -216,7 +218,7 @@ const AGENTS: DemoAgent[] = [
         "Push to a public GitHub repo. The raw URL becomes installable.\n",
       "hub.md":
         "# skills.md hub\n\n" +
-        "Every agent's vault has a `skills.md` file at the root that lists installed skills as wikilinks (`[[skills/summarize]]`, etc.). The daemon maintains this — don't hand-edit, install/uninstall via the UI instead.\n\n" +
+        "Every agent's vault has a `skills.md` file at the root that lists installed skills as wikilinks (`[[summarize]]`, `[[bug-report]]`, etc. — bare name, no `skills/` prefix). The daemon maintains this — don't hand-edit, install/uninstall via the UI instead. Each linked skill lives at `skills/<name>.md`.\n\n" +
         "The agent's system prompt teaches them: 'when a user request maps to a skill in skills.md, read that file and apply the pattern.'\n",
     },
   },

@@ -88,7 +88,7 @@ These graduate from spec → implementation in M-MDContract.
 | **M0** ✅ | Daemon vertical slice. Bun daemon supervising `claude -p --output-format stream-json` subprocess via WS. End-to-end confirmed (`apiKeySource: "none"`). |
 | **M1** ✅ | Multi-agent + persistence. SQLite at `~/.hexagent/squadron.db`. Agents survive page reload + daemon restart (via `claude --resume`). Multi-tab sync via broadcast. |
 | **M3 (subset)** ✅ | Vaults at `~/.hexagent/agents/<id>/vault/` (Obsidian-compatible). Local MCP HTTP server hosted by daemon, injected per-agent via `--mcp-config`. Tools: `send_to(name, text)` and `read_neighbor_vault(name, path)` — adjacency-gated incl. router-cluster bridges. World features (walls + routers) daemon-persisted in SQLite. |
-| **M3.5** ✅ | Autonomous wakeup with guardrails. Recipient agents auto-respond when they receive an inter-agent message. Per-pair turn budget (6), per-pair throttle (1.5s), kill-switch wiring. User manual prompt resets the pair budget. |
+| **M3.5** ✅ | Autonomous wakeup with guardrails. Recipient agents auto-respond when they receive an inter-agent message. Per-pair turn budget (4), per-pair throttle (1.5s), kill-switch wiring. User manual prompt resets the pair budget. |
 
 ### UX fixes shipped (worth tracking)
 
@@ -113,7 +113,7 @@ These graduate from spec → implementation in M-MDContract.
 | **M4** | Throttle / loop-detector / global cost ceiling — full guardrail set. Hooks-based. |
 | **M5** | Convert prototype to Next.js + Tailwind + shadcn (production codebase). |
 | **M6** | ✅ **Shipped (May 2026).** `move_toward` autonomous movement with path planning + animation. |
-| **M-MultiModel** | Gemini + Ollama providers wired. |
+| **M-MultiModel** (in progress) | Worker abstraction + ✅ OpenRouter (chat-only trial path, shipped May 2026). Codex (gated on ChatGPT-Plus), Gemini, Ollama still pending. Per-agent provider picker UI + lazy onboarding card on first send still pending. |
 | **M-License** | Pick AGPL or BUSL; ship LICENSE + headers. |
 
 The next concrete deliverable before more features: a **four-section architecture audit** (identity / permissions / MD addressing / wire protocol) — see Section 12.
@@ -165,7 +165,7 @@ Center is a tabbed workspace, IDE-style.
 
 ### Right sidebar
 - **Top — agent config panel:** status banner (`Draft` / `Live`); editable name, model, system prompt, allowed tools, MCP servers, working directory, per-edge toggles for current neighbors. Connections section with `+` to wire up new providers (CLI OAuth handoff or API key). Read-only telemetry: status, last activity, message count, approximate usage.
-- **Bottom — memory graph:** Obsidian-style force-directed graph of the focused agent's vault. Edges are wikilinks (M3 has placeholder edges; full wikilink parsing is M-MDContract). Click node → opens that file as a new tab in the center. Hover → preview.
+- **Bottom — memory graph:** Obsidian-style force-directed graph of the focused agent's vault. Edges are real wikilinks parsed from `.md` files (✅ shipped May 2026 via `parseVaultEdges()` — see M3 description below). Click node → opens that file as a new tab in the center. Hover → preview.
 - **Drag-resizable:** left and right sidebars resize via the inner-edge handles. Widths persist to localStorage. Bounds: left 220–560, right 240–640.
 
 ## 9. Agent lifecycle
@@ -191,7 +191,7 @@ Center is a tabbed workspace, IDE-style.
 
 | Guardrail | Status | Notes |
 |---|---|---|
-| Per-pair turn budget (6) | ✅ M3.5 | Resets on any user manual prompt to either side. |
+| Per-pair turn budget (4) | ✅ M3.5 | Resets on any user manual prompt to either side. |
 | Per-pair throttle (1.5s) | ✅ M3.5 | Min gap between auto-triggers per pair. |
 | Top-bar kill switch | ✅ M3.5 | Daemon-side `autonomyEnabled` flag. Multi-tab synced. |
 | Per-session message-rate cap | M4 | Belt-and-suspenders on top of pair throttle. |
