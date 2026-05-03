@@ -1,6 +1,6 @@
 {
   "name": "@m-luketin/squadron",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A spatial multi-agent control plane that runs on your machine. Agents live on a hex grid, share a markdown vault, walk to each other, talk through MCP.",
   "keywords": [
     "ai",
